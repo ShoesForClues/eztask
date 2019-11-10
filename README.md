@@ -69,7 +69,7 @@ end
 ```
 
 # Some extra features
-Each thread has its own callback for when it is paused or if it is terminated.
+Each thread has its own callback for when it is paused/resumed or if it is terminated.
 You can also define a custom init function that is called each time a thread is created.
 ```lua
 eztask.thread_init=function(thread)
