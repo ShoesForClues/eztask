@@ -1,6 +1,8 @@
 # eztask
 A task scheduler written in Lua
 
+This library will work with any platform that uses Lua, including LÖVE, Corona, Roblox, etc..
+
 # How to use in LÖVE
 ```lua
 local eztask=require "eztask"
