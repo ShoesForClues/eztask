@@ -52,11 +52,15 @@ function eztask:new_signal()
 	function signal:attach(action,no_thread)
 		eztask._native.assert(type(action)=="function",("Cannot attach %s to callback."):format(type(action)))
 		local callback={action=action}
-		if not no_thread then
-			callback.parent_thread=eztask.current_thread or eztask
-		end
 		function callback:detach()
 			callbacks[self]=nil
+			if self.parent_thread~=nil then
+				self.parent_thread.callbacks[self]=nil
+			end
+		end
+		if not no_thread and eztask.current_thread then
+			callback.parent_thread=eztask.current_thread
+			eztask.current_thread.callbacks[callback]=callback
 		end
 		callbacks[callback]=callback
 		return callback
@@ -105,11 +109,15 @@ function eztask:new_property(value)
 	function property:attach(action,no_thread)
 		eztask._native.assert(type(action)=="function",("Cannot attach %s to property callback."):format(type(action)))
 		local callback={action=action}
-		if not no_thread then
-			callback.parent_thread=eztask.current_thread
-		end
 		function callback:detach()
 			callbacks[self]=nil
+			if self.parent_thread~=nil then
+				self.parent_thread.callbacks[self]=nil
+			end
+		end
+		if not no_thread and eztask.current_thread then
+			callback.parent_thread=eztask.current_thread
+			eztask.current_thread.callbacks[callback]=callback
 		end
 		callbacks[callback]=callback
 		return callback
