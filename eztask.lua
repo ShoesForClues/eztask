@@ -41,8 +41,8 @@ local wrap   = coroutine.wrap
 --[Wrapped Functions]
 eztask.assert  = assert
 eztask.error   = error
-eztask.require = function(path) return require(path) end
-eztask.tick    = function() return 0 end
+eztask.require = require
+eztask.tick    = os.clock
 
 function eztask:new_signal()
 	local signal={}
