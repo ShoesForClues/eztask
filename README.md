@@ -19,7 +19,7 @@ eztask:create_thread(function(thread,arg1)
   
   --[[
   NOTE: Invoking the signal will create a new thread each time. This may add overhead. If you do not wish 
-  create a thread, pass a boolean as a second argument when attaching to the callback.
+  to create a thread, pass a boolean as a second argument when attaching to the callback.
   Also note any callback attachments within the thread without passing the boolean parameter will 
   automatically be detached if the thread is killed
   ]]
