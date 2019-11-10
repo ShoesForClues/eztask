@@ -18,7 +18,7 @@ eztask:create_thread(function(thread,arg1)
   
   --[[
   NOTE: Invoking the signal will create a new thread each time. This may add overhead. If you do not wish 
-  create a thread, pass a boolean as a second argument when attachingto the callback.
+  create a thread, pass a boolean as a second argument when attaching to the callback.
   ]]
   local render_callback=render:attach(function()
     thread.lib.dosomething()
