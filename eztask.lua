@@ -45,13 +45,16 @@ eztask._native.wrap   = coroutine.wrap
 eztask.require = function(path) return require(path) end
 eztask.tick    = function() return 0 end
 
-function eztask:new_signal(no_threads)
+function eztask:new_signal()
 	local signal={}
 	local callbacks={}
 	
-	function signal:attach(action)
+	function signal:attach(action,no_thread)
 		eztask._native.assert(type(action)=="function",("Cannot attach %s to callback."):format(type(action)))
-		local callback={action=action,parent_thread=eztask.current_thread}
+		local callback={action=action}
+		if not no_thread then
+			callback.parent_thread=eztask.current_thread or eztask
+		end
 		function callback:detach()
 			callbacks[self]=nil
 		end
@@ -65,11 +68,11 @@ function eztask:new_signal(no_threads)
 	
 	function signal:invoke(...)
 		for _,callback in pairs(callbacks) do
-			if not no_threads then
+			if callback.parent_thread then
 				local args={...}
-				eztask:create_thread(function()
+				callback.parent_thread:create_thread(function()
 					callback.action(eztask._native.unpack(args))
-				end,callback.parent_thread):init()
+				end):init()
 			else
 				callback.action(...)
 			end
@@ -79,7 +82,7 @@ function eztask:new_signal(no_threads)
 	return signal
 end
 
-function eztask:new_property(value,no_threads)
+function eztask:new_property(value)
 	local property
 	local _value,old_value=value
 	local callbacks={}
@@ -99,9 +102,12 @@ function eztask:new_property(value,no_threads)
 		end
 	}
 	
-	function property:attach(action)
+	function property:attach(action,no_thread)
 		eztask._native.assert(type(action)=="function",("Cannot attach %s to property callback."):format(type(action)))
-		local callback={action=action,parent_thread=eztask.current_thread}
+		local callback={action=action}
+		if not no_thread then
+			callback.parent_thread=eztask.current_thread
+		end
 		function callback:detach()
 			callbacks[self]=nil
 		end
@@ -115,10 +121,10 @@ function eztask:new_property(value,no_threads)
 	
 	function property:invoke(value,old_value)
 		for _,callback in pairs(callbacks) do
-			if not no_threads then
-				eztask:create_thread(function()
+			if callback.parent_thread then
+				callback.parent_thread:create_thread(function()
 					callback.action(value,old_value)
-				end,callback.parent_thread):init()
+				end):init()
 			else
 				callback.action(value,old_value)
 			end
@@ -160,10 +166,6 @@ function _thread:depend(name)
 	eztask._native.assert(_thread.imports[name]~=nil,"Missing dependency: "..name)
 end
 
-function _thread:create_thread(env)
-	return eztask:create_thread(env,_thread)
-end
-
 setmetatable(_thread,{
 	__index=function(t,k)
 		return eztask.current_thread[k] or eztask.current_thread.imports[k]
@@ -201,7 +203,7 @@ function eztask:create_thread(env,parent_thread)
 				sub_thread.running.value=false
 			end
 		end
-	end)
+	end,true)
 	
 	function thread:resume(dt,...)
 		thread.tick=thread.tick+(dt or 0)
@@ -251,6 +253,10 @@ function eztask:create_thread(env,parent_thread)
 		end
 		thread:resume(0,...)
 		return thread
+	end
+	
+	function thread:create_thread(env)
+		return eztask:create_thread(env,thread)
 	end
 	
 	return thread
