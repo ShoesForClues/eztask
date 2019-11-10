@@ -20,11 +20,12 @@ eztask:create_thread(function(thread,arg1)
   --[[
   NOTE: Invoking the signal will create a new thread each time. This may add overhead. If you do not wish 
   create a thread, pass a boolean as a second argument when attaching to the callback.
+  Also note any callback attachments within the thread without passing the boolean parameter will 
+  automatically be detached if the thread is killed
   ]]
   local render_callback=render:attach(function()
     thread.lib.dosomething()
   end) --To disconnect callback do render_callback:detach()
-  --Also note any callback attachments within the thread will automatically be detached if the thread is killed
 
   --[[
   NOTE: While you can create child threads, it's recommended to just create a neighbor thread instead. This is 
