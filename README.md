@@ -9,9 +9,10 @@ local eztask=require "eztask"
 eztask.tick=love.timer.getTime
 
 --Bind native callback
-local render=eztask:new_signal();function love.draw() render:invoke() end
+local render=eztask:new_signal()
 
 function love.update(dt) eztask:step(dt) end
+function love.draw() render:invoke() end
 
 eztask:create_thread(function(thread,arg1)
   thread:import "path/to/lib" --Or thread:import("path/to/lib","libname")
