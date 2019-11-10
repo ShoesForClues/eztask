@@ -22,7 +22,12 @@ eztask:create_thread(function(thread,arg1)
     thread.lib.dosomething()
   end) --To disconnect callback do render_callback:detach()
 
-  thread:create_thread(function() --While you can create child threads, it's recommended to just create a neighbor thread instead.
+  --[[
+  NOTE: While you can create child threads, it's recommended to just create a neighbor 
+  thread instead. This is because the child thread will not resume until the parent 
+  thread resumes first.
+  ]]
+  thread:create_thread(function()
     while true do
       print(arg1)
       thread.lib.doayield() --You can reference the parent thread's libraries instead of reimporting
