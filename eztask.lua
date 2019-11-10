@@ -23,25 +23,24 @@ SOFTWARE.
 ]]
 
 local eztask={
-	_version       = {2,0,5};
-	_native        = {};
-	imports        = {};
-	threads        = {};
+	_version = {2,0,5};
+	imports  = {};
+	threads  = {};
 }
 
 eztask.imports.eztask=eztask --wtf
 
 --[Native Functions]
-eztask._native.assert = assert
-eztask._native.error  = error
-eztask._native.unpack = unpack or table.unpack
-eztask._native.create = coroutine.create
-eztask._native.resume = coroutine.resume
-eztask._native.yield  = coroutine.yield
-eztask._native.status = coroutine.status
-eztask._native.wrap   = coroutine.wrap
+local unpack = unpack or table.unpack
+local create = coroutine.create
+local resume = coroutine.resume
+local yield  = coroutine.yield
+local status = coroutine.status
+local wrap   = coroutine.wrap
 
 --[Wrapped Functions]
+eztask.assert  = assert
+eztask.error   = error
 eztask.require = function(path) return require(path) end
 eztask.tick    = function() return 0 end
 
@@ -75,7 +74,7 @@ function eztask:new_signal()
 			if callback.parent_thread then
 				local args={...}
 				callback.parent_thread:create_thread(function()
-					callback.action(eztask._native.unpack(args))
+					callback.action(unpack(args))
 				end):init()
 			else
 				callback.action(...)
@@ -215,15 +214,15 @@ function eztask:create_thread(env,parent_thread)
 	
 	function thread:resume(dt,...)
 		thread.tick=thread.tick+(dt or 0)
-		if thread.coroutine~=nil and eztask._native.status(thread.coroutine)=="dead" then
+		if thread.coroutine~=nil and status(thread.coroutine)=="dead" then
 			thread:delete()
-		elseif thread.coroutine~=nil and thread.running.value==true and eztask._native.status(thread.coroutine)=="suspended" and thread.resume_tick<=thread.tick then
+		elseif thread.coroutine~=nil and thread.running.value==true and status(thread.coroutine)=="suspended" and thread.resume_tick<=thread.tick then
 			local previous_thread=eztask.current_thread
 			eztask.current_thread=thread
 			for _,sub_thread in pairs(thread.threads) do
 				sub_thread:resume(dt)
 			end
-			eztask._native.assert(eztask._native.resume(thread.coroutine,_thread,...))
+			eztask._native.assert(resume(thread.coroutine,_thread,...))
 			eztask.current_thread=previous_thread
 		end
 	end
@@ -231,7 +230,7 @@ function eztask:create_thread(env,parent_thread)
 	function thread:sleep(d)
 		local raw_tick=eztask.tick() or 0
 		thread.resume_tick=thread.tick+(d or 0)
-		eztask._native.yield()
+		yield()
 		return eztask.tick()-raw_tick
 	end
 	
@@ -254,7 +253,7 @@ function eztask:create_thread(env,parent_thread)
 		end
 		thread.running.value=true
 		thread.resume_state=true
-		thread.coroutine=eztask._native.create(thread.env)
+		thread.coroutine=create(thread.env)
 		thread.parent_thread.threads[thread]=thread
 		if eztask.thread_init~=nil then
 			eztask.thread_init(thread)
