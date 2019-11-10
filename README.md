@@ -25,7 +25,7 @@ eztask:create_thread(function(thread,arg1)
   thread:create_thread(function() --You can create child threads
     while true do
       print(arg1)
-      thread.lib:doayield() --You can reference the parent thread's libraries instead of reimporting
+      thread.lib.doayield() --You can reference the parent thread's libraries instead of reimporting
     end
   end):init()
 
