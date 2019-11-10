@@ -101,4 +101,6 @@ eztask:create_thread(function(thread)
   thread:sleep(3)
   a:delete() --Kill the thread
 end):init()
+
+--If you wish to reset a thread, simply call init() again
 ```
