@@ -19,7 +19,7 @@ eztask:create_thread(function(thread,arg1)
   If you do not wish create a thread, pass a boolean as a second argument when attaching
   to the callback.
   ]]
-  local render_callback=render:attach(function() --You do not need to define thread again
+  local render_callback=render:attach(function()
     thread.lib.dosomething()
   end) --To disconnect callback do render_callback:detach()
 
@@ -28,7 +28,7 @@ eztask:create_thread(function(thread,arg1)
   thread instead. This is because the child thread will not resume until the parent 
   thread resumes first.
   ]]
-  thread:create_thread(function()
+  thread:create_thread(function() --You do not need to define thread again
     while true do
       print(arg1)
       thread.lib.doayield() --You can reference the parent thread's libraries instead of reimporting
