@@ -49,7 +49,7 @@ function eztask:new_signal()
 	local callbacks={}
 	
 	function signal:attach(action,no_thread)
-		eztask._native.assert(type(action)=="function",("Cannot attach %s to callback."):format(type(action)))
+		eztask.assert(type(action)=="function",("Cannot attach %s to callback."):format(type(action)))
 		local callback={action=action}
 		function callback:detach()
 			callbacks[self]=nil
@@ -106,7 +106,7 @@ function eztask:new_property(value)
 	}
 	
 	function property:attach(action,no_thread)
-		eztask._native.assert(type(action)=="function",("Cannot attach %s to property callback."):format(type(action)))
+		eztask.assert(type(action)=="function",("Cannot attach %s to property callback."):format(type(action)))
 		local callback={action=action}
 		function callback:detach()
 			callbacks[self]=nil
@@ -146,12 +146,12 @@ end
 local _thread={}
 
 function _thread:import(source,name)
-	eztask._native.assert(source~=nil,"Cannot import from nil")
+	eztask.assert(source~=nil,"Cannot import from nil")
 	if name==nil then
 		if type(source)=="string" then
 			name=source:sub((source:match("^.*()/") or 0)+1,#source)
 		else
-			eztask._native.error("Cannot import "..type(source).." without a name")
+			eztask.error("Cannot import "..type(source).." without a name")
 		end
 	else
 		name=tostring(name)
@@ -170,7 +170,7 @@ function _thread:import(source,name)
 end
 
 function _thread:depend(name)
-	eztask._native.assert(_thread.imports[name]~=nil,"Missing dependency: "..name)
+	eztask.assert(_thread.imports[name]~=nil,"Missing dependency: "..name)
 end
 
 setmetatable(_thread,{
@@ -182,7 +182,7 @@ setmetatable(_thread,{
 
 function eztask:create_thread(env,parent_thread)
 	if type(env)=="string" then env=eztask.require(env) or env end
-	eztask._native.assert(type(env)=="function","Cannot create thread with invalid environment")
+	eztask.assert(type(env)=="function","Cannot create thread with invalid environment")
 	
 	local thread={
 		running       = eztask:new_property(false,true);
@@ -222,7 +222,7 @@ function eztask:create_thread(env,parent_thread)
 			for _,sub_thread in pairs(thread.threads) do
 				sub_thread:resume(dt)
 			end
-			eztask._native.assert(resume(thread.coroutine,_thread,...))
+			eztask.assert(resume(thread.coroutine,_thread,...))
 			eztask.current_thread=previous_thread
 		end
 	end
