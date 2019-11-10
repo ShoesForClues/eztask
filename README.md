@@ -17,7 +17,8 @@ eztask:create_thread(function(thread,arg1)
   thread:import "path/to/lib" --Or thread:import("path/to/lib","libname")
   
   --[[
-  NOTE: Invoking the signal will create a new thread each time. This may add overhead. If you do not wish create a thread, pass a boolean as a second argument when attachingto the callback.
+  NOTE: Invoking the signal will create a new thread each time. This may add overhead. If you do not wish 
+  create a thread, pass a boolean as a second argument when attachingto the callback.
   ]]
   local render_callback=render:attach(function()
     thread.lib.dosomething()
@@ -25,7 +26,8 @@ eztask:create_thread(function(thread,arg1)
   --Also note any callback attachments within the thread will automatically be detached if the thread is killed
 
   --[[
-  NOTE: While you can create child threads, it's recommended to just create a neighbor thread instead. This is because the child thread will not resume until the parent thread resumes first.
+  NOTE: While you can create child threads, it's recommended to just create a neighbor thread instead. This is 
+  because the child thread will not resume until the parent thread resumes first.
   ]]
   thread:create_thread(function() --You do not need to define thread again
     while true do
