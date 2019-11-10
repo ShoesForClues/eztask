@@ -44,10 +44,17 @@ return function(thread) --You will need to sandbox the library if you wish to ha
   thread:depend "somedependency"
   thread:depend "someotherdependency"
 
-  local API={}
+  local API={
+    random_property=thread.eztask:new_property("hi")
+  }
+
+  API.random_property:attach(function(new,old)
+    print(new,old)
+  end)
 
   function API.dosomething()
     thread.somedependency.doanotherthing()
+    API.random_property.value="hello" --This will invoke a callback
   end
 
   function API.doayield() --This function will yield the current thread that called it
