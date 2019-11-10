@@ -30,7 +30,7 @@ eztask:create_thread(function(thread,arg1)
   --[[
   NOTE: While you can create child threads, it's recommended to just create a neighbor thread instead. This is 
   because the child thread will not resume until the parent thread resumes first. The only exception to this 
-  are callbacks, however, that behavior may also change in the future.
+  are callbacks. However, that behavior may also change in the future.
   ]]
   thread:create_thread(function() --You do not need to redefine thread again
     while true do
