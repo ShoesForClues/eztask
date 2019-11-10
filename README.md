@@ -81,6 +81,14 @@ local a=eztask:create_thread(function(thread)
   end
 end):init()
 
+a.running:attach(function(state)
+  if state then
+    print("Thread resumed")
+  else
+    print("Thread was paused")
+  end
+end)
+
 a.killed:attach(function()
   print("Thread was killed!")
 end)
