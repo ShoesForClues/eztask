@@ -24,6 +24,7 @@ eztask:create_thread(function(thread,arg1)
   local render_callback=render:attach(function()
     thread.lib.dosomething()
   end) --To disconnect callback do render_callback:detach()
+  --Also note any callback attachments within the thread will automatically be detached if the thread is killed
 
   --[[
   NOTE: While you can create child threads, it's recommended to just create a neighbor 
