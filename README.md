@@ -65,3 +65,32 @@ return function(thread) --You will need to sandbox the library if you wish to ha
   return API
 end
 ```
+
+# Some extra features
+Each thread has its own callback for when it is paused or if it is terminated.
+You can also define a custom init function that is called each time a thread is created.
+```lua
+eztask.thread_init=function(thread)
+  thread.something="Hello World!"
+end
+
+local a=eztask:create_thread(function(thread)
+  while true do
+    print(thread.something)
+    thread:sleep(1)
+  end
+end):init()
+
+a.killed:attach(function()
+  print("Thread was killed!")
+end)
+
+eztask:create_thread(function(thread)
+  thread:sleep(3)
+  a.running.value=false --Pause the thread
+  thread:sleep(3)
+  a.running.value=true --Resume
+  thread:sleep(3)
+  a:delete() --Kill the thread
+end):init()
+```
