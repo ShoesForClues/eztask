@@ -23,7 +23,7 @@ SOFTWARE.
 ]]
 
 local eztask={
-	_version = {2,0,5};
+	_version = {2,0,6};
 	imports  = {};
 	threads  = {};
 }
@@ -44,106 +44,12 @@ eztask.error   = error
 eztask.require = require
 eztask.tick    = os.clock
 
-function eztask:new_signal()
-	local signal={}
-	local callbacks={}
-	
-	function signal:attach(action,no_thread)
-		eztask.assert(type(action)=="function",("Cannot attach %s to callback."):format(type(action)))
-		local callback={action=action}
-		function callback:detach()
-			callbacks[self]=nil
-			if self.parent_thread~=nil then
-				self.parent_thread.callbacks[self]=nil
-			end
-		end
-		if not no_thread and eztask.current_thread then
-			callback.parent_thread=eztask.current_thread
-			eztask.current_thread.callbacks[callback]=callback
-		end
-		callbacks[callback]=callback
-		return callback
-	end
-	
-	function signal:detach_all()
-		callbacks={}
-	end
-	
-	function signal:invoke(...)
-		for _,callback in pairs(callbacks) do
-			if callback.parent_thread then
-				local args={...}
-				callback.parent_thread:create_thread(function()
-					callback.action(unpack(args))
-				end):init()
-			else
-				callback.action(...)
-			end
-		end
-	end
-	
-	return signal
-end
-
-function eztask:new_property(value)
-	local property
-	local _value,old_value=value
-	local callbacks={}
-	
-	property={
-		__index=function(t,k)
-			if k=="value" then
-				return _value
-			end
-		end;
-		__newindex=function(t,k,v)
-			if k=="value" and _value~=v then
-				old_value=_value
-				_value=v
-				property:invoke(v,old_value)
-			end
-		end
-	}
-	
-	function property:attach(action,no_thread)
-		eztask.assert(type(action)=="function",("Cannot attach %s to property callback."):format(type(action)))
-		local callback={action=action}
-		function callback:detach()
-			callbacks[self]=nil
-			if self.parent_thread~=nil then
-				self.parent_thread.callbacks[self]=nil
-			end
-		end
-		if not no_thread and eztask.current_thread then
-			callback.parent_thread=eztask.current_thread
-			eztask.current_thread.callbacks[callback]=callback
-		end
-		callbacks[callback]=callback
-		return callback
-	end
-	
-	function property:detach_all()
-		callbacks={}
-	end
-	
-	function property:invoke(value,old_value)
-		for _,callback in pairs(callbacks) do
-			if callback.parent_thread then
-				callback.parent_thread:create_thread(function()
-					callback.action(value,old_value)
-				end):init()
-			else
-				callback.action(value,old_value)
-			end
-		end
-	end
-	
-	setmetatable(property,property)
-	
-	return property
-end
-
-local _thread={}
+local _thread=setmetatable({},{
+	__index=function(t,k)
+		return eztask.current_thread[k] or eztask.current_thread.imports[k]
+	end;
+	__newindex=eztask.current_thread
+})
 
 function _thread:import(source,name)
 	eztask.assert(source~=nil,"Cannot import from nil")
@@ -156,11 +62,9 @@ function _thread:import(source,name)
 	else
 		name=tostring(name)
 	end
-	if type(source)=="string" then
-		source=eztask.require(source) or source
-	end
-	if pcall(require,source) then
-		source=data
+	local did_require,return_source=pcall(eztask.require,source)
+	if did_require then
+		source=return_source
 	end
 	if type(source)=="function" then --Assuming it's already sandboxed
 		source=source(_thread)
@@ -173,20 +77,70 @@ function _thread:depend(name)
 	eztask.assert(_thread.imports[name]~=nil,"Missing dependency: "..name)
 end
 
-setmetatable(_thread,{
-	__index=function(t,k)
-		return eztask.current_thread[k] or eztask.current_thread.imports[k]
-	end;
-	__newindex=eztask.current_thread
-})
+function eztask.new_signal()
+	local signal={callbacks={}}
+	
+	function signal:attach(call,no_thread)
+		eztask.assert(type(call)=="function",("Cannot attach %s to callback."):format(type(call)))
+		local callback={call=call}
+		function callback:detach()
+			self.callbacks[self]=nil
+			if self.parent_thread~=nil then
+				self.parent_thread.callbacks[self]=nil
+			end
+		end
+		self.callbacks[callback]=callback
+		if not no_thread and eztask.current_thread then
+			callback.parent_thread=eztask.current_thread
+			eztask.current_thread.callbacks[callback]=callback
+		end
+		return callback
+	end
+	
+	function signal:invoke(...)
+		for _,callback in pairs(self.callbacks) do
+			if callback.parent_thread then
+				local args={...}
+				callback.parent_thread.new_thread(function()
+					callback.call(unpack(args))
+				end):init()
+			else
+				callback.call(...)
+			end
+		end
+	end
+	
+	return signal
+end
 
-function eztask:create_thread(env,parent_thread)
+function eztask.new_property(value)
+	local property=eztask.new_signal()
+	local _value,old_value=value
+	
+	property.__index=function(t,k)
+		if k=="value" then
+			return _value
+		end
+	end;
+	property.__newindex=function(t,k,v)
+		if k=="value" and _value~=v then
+			old_value=_value;_value=v
+			property:invoke(v,old_value)
+		end
+	end
+	
+	setmetatable(property,property)
+	
+	return property
+end
+
+function eztask.new_thread(env,parent_thread)
 	if type(env)=="string" then env=eztask.require(env) or env end
 	eztask.assert(type(env)=="function","Cannot create thread with invalid environment")
 	
 	local thread={
-		running       = eztask:new_property(false,true);
-		killed        = eztask:new_signal(true);
+		running       = eztask.new_property(false,true);
+		killed        = eztask.new_signal(true);
 		tick          = 0;
 		resume_tick   = 0;
 		resume_state  = false;
@@ -236,11 +190,11 @@ function eztask:create_thread(env,parent_thread)
 	
 	function thread:delete()
 		thread.running.value=false
-		for _,callback in pairs(thread.callbacks) do
-			callback:detach()
-		end
 		for _,child_thread in pairs(thread.threads) do
 			child_thread:delete()
+		end
+		for _,callback in pairs(thread.callbacks) do
+			callback:detach()
 		end
 		thread.coroutine=nil
 		thread.parent_thread.threads[thread]=nil
@@ -262,8 +216,8 @@ function eztask:create_thread(env,parent_thread)
 		return thread
 	end
 	
-	function thread:create_thread(env)
-		return eztask:create_thread(env,thread)
+	function thread.new_thread(env)
+		return eztask.new_thread(env,thread)
 	end
 	
 	return thread
