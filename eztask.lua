@@ -139,7 +139,7 @@ function eztask.new_thread(env,parent_thread)
 	eztask.assert(type(env)=="function","Cannot create thread with invalid environment")
 	
 	local thread={
-		running       = eztask.new_property(false,true);
+		running       = eztask.new_property(false);
 		killed        = eztask.new_signal(true);
 		tick          = 0;
 		resume_tick   = 0;
