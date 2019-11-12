@@ -3,6 +3,21 @@ A task scheduler written in Lua
 
 This library will work with any platform that uses Lua, including LÖVE, Corona, etc..
 
+# Example Usage
+```lua
+local thread_a=eztask.new_thread(function(thread)
+  while thread:sleep(1) do
+    print("Apples")
+  end
+end):init()
+
+local thread_b=eztask.new_thread(function(thread)
+  while thread:sleep(0.5) do
+    print("Oranges")
+  end
+end):init()
+```
+
 # How to use in LÖVE
 ```lua
 local eztask=require "eztask"
