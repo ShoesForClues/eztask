@@ -28,8 +28,6 @@ local eztask={
 	threads  = {};
 }
 
-eztask.imports.eztask=eztask --wtf
-
 --[Native Functions]
 local unpack = unpack or table.unpack
 local create = coroutine.create
@@ -44,8 +42,11 @@ eztask.error   = error
 eztask.require = require
 eztask.tick    = os.clock
 
-local _thread,_scope={},setmetatable({},{
-	__index=function(_,k) 
+local _thread={}
+
+eztask.imports.eztask=eztask --wtf
+eztask._scope=setmetatable({},{
+	__index=function(_,k)
 		return eztask.current_thread[k] or eztask.current_thread.imports[k]
 	end
 })
@@ -66,7 +67,7 @@ function _thread:import(source,name)
 		source=return_source
 	end
 	if type(source)=="function" then --Assuming it's already sandboxed
-		source=source(_scope)
+		source=source(eztask._scope)
 	end
 	self.imports[name]=source
 	return source
@@ -93,7 +94,7 @@ function _thread:resume(dt,...)
 		for _,sub_thread in pairs(self.threads) do
 			sub_thread:resume(dt)
 		end
-		eztask.assert(resume(self.coroutine,_scope,...))
+		eztask.assert(resume(self.coroutine,eztask._scope,...))
 		eztask.current_thread=previous_thread
 	end
 end
