@@ -23,7 +23,7 @@ SOFTWARE.
 ]]
 
 local eztask={
-	_version = {2,0,6};
+	_version = {2,0,7};
 	imports  = {};
 	threads  = {};
 }
@@ -44,11 +44,10 @@ eztask.error   = error
 eztask.require = require
 eztask.tick    = os.clock
 
-local _thread=setmetatable({},{
-	__index=function(t,k)
+local _thread,_scope={},setmetatable({},{
+	__index=function(_,k) 
 		return eztask.current_thread[k] or eztask.current_thread.imports[k]
-	end;
-	__newindex=eztask.current_thread
+	end
 })
 
 function _thread:import(source,name)
@@ -67,14 +66,68 @@ function _thread:import(source,name)
 		source=return_source
 	end
 	if type(source)=="function" then --Assuming it's already sandboxed
-		source=source(_thread)
+		source=source(_scope)
 	end
-	_thread.imports[name]=source
+	self.imports[name]=source
 	return source
 end
 
 function _thread:depend(name)
-	eztask.assert(_thread.imports[name]~=nil,"Missing dependency: "..name)
+	eztask.assert(self.imports[name]~=nil,"Missing dependency: "..name)
+end
+
+function _thread:sleep(d)
+	local raw_tick=eztask.tick() or 0
+	eztask.current_thread.resume_tick=eztask.current_thread.tick+(d or 0)
+	yield()
+	return eztask.tick()-raw_tick
+end
+
+function _thread:resume(dt,...)
+	self.tick=self.tick+(dt or 0)
+	if status(self.coroutine)=="dead" then
+		self:delete()
+	elseif self.running.value==true and self.resume_tick<=self.tick then
+		local previous_thread=eztask.current_thread
+		eztask.current_thread=self
+		for _,sub_thread in pairs(self.threads) do
+			sub_thread:resume(dt)
+		end
+		eztask.assert(resume(self.coroutine,_scope,...))
+		eztask.current_thread=previous_thread
+	end
+end
+
+function _thread:delete()
+	self.running.value=false
+	for _,child_thread in pairs(self.threads) do
+		child_thread:delete()
+	end
+	for _,callback in pairs(self.callbacks) do
+		callback:detach()
+	end
+	self.coroutine=nil
+	self.parent_thread.threads[self]=nil
+	self.killed:invoke()
+end
+
+function _thread:init(...)
+	if self.coroutine~=nil then
+		self:delete()
+	end
+	self.running.value=true
+	self.resume_state=true
+	self.coroutine=create(self.env)
+	self.parent_thread.threads[self]=self
+	if eztask.thread_init~=nil then
+		eztask.thread_init(self)
+	end
+	self:resume(0,...)
+	return thread
+end
+
+function _thread.new_thread(env)
+	return eztask.new_thread(env,eztask.current_thread)
 end
 
 function eztask.new_signal()
@@ -101,9 +154,9 @@ function eztask.new_signal()
 		for _,callback in pairs(self.callbacks) do
 			if callback.parent_thread then
 				local args={...}
-				callback.parent_thread.new_thread(function()
+				eztask.new_thread(function()
 					callback.call(unpack(args))
-				end):init()
+				end,callback.parent_thread):init()
 			else
 				callback.call(...)
 			end
@@ -151,8 +204,6 @@ function eztask.new_thread(env,parent_thread)
 		imports       = {};
 	}
 	
-	setmetatable(thread.imports,{__index=(thread.parent_thread or eztask).imports})
-	
 	thread.running:attach(function(state)
 		if state==true then
 			for _,sub_thread in pairs(thread.threads) do
@@ -166,59 +217,8 @@ function eztask.new_thread(env,parent_thread)
 		end
 	end,true)
 	
-	function thread:resume(dt,...)
-		thread.tick=thread.tick+(dt or 0)
-		if thread.coroutine~=nil and status(thread.coroutine)=="dead" then
-			thread:delete()
-		elseif thread.coroutine~=nil and thread.running.value==true and status(thread.coroutine)=="suspended" and thread.resume_tick<=thread.tick then
-			local previous_thread=eztask.current_thread
-			eztask.current_thread=thread
-			for _,sub_thread in pairs(thread.threads) do
-				sub_thread:resume(dt)
-			end
-			eztask.assert(resume(thread.coroutine,_thread,...))
-			eztask.current_thread=previous_thread
-		end
-	end
-	
-	function thread:sleep(d)
-		local raw_tick=eztask.tick() or 0
-		thread.resume_tick=thread.tick+(d or 0)
-		yield()
-		return eztask.tick()-raw_tick
-	end
-	
-	function thread:delete()
-		thread.running.value=false
-		for _,child_thread in pairs(thread.threads) do
-			child_thread:delete()
-		end
-		for _,callback in pairs(thread.callbacks) do
-			callback:detach()
-		end
-		thread.coroutine=nil
-		thread.parent_thread.threads[thread]=nil
-		thread.killed:invoke()
-	end
-	
-	function thread:init(...)
-		if thread.coroutine~=nil then
-			thread:delete()
-		end
-		thread.running.value=true
-		thread.resume_state=true
-		thread.coroutine=create(thread.env)
-		thread.parent_thread.threads[thread]=thread
-		if eztask.thread_init~=nil then
-			eztask.thread_init(thread)
-		end
-		thread:resume(0,...)
-		return thread
-	end
-	
-	function thread.new_thread(env)
-		return eztask.new_thread(env,thread)
-	end
+	setmetatable(thread.imports,{__index=(thread.parent_thread or eztask).imports})
+	setmetatable(thread,{__index=_thread})
 	
 	return thread
 end
