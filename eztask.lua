@@ -64,8 +64,10 @@ _property.__index=function(t,k)
 end
 _property.__newindex=function(t,k,v)
 	local old=rawget(t,"_value")
-	rawset(t,"_value",v)
-	t:invoke(v,old)
+	if v~=old then
+		rawset(t,"_value",v)
+		t:invoke(v,old)
+	end
 end
 
 function _thread.import(instance,source,name,not_sandboxed)
