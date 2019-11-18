@@ -130,7 +130,7 @@ end
 function _thread.resume(instance,dt,...)
 	instance.tick=instance.tick+(dt or 0)
 	instance.raw_tick=eztask.tick()
-	if status(instance.coroutine)=="dead" then
+	if instance.coroutine==nil or status(instance.coroutine)=="dead" then
 		instance:delete()
 	elseif instance.running.value==true and instance.resume_tick<=instance.tick then
 		local previous_thread=eztask.current_thread
@@ -150,7 +150,6 @@ function _thread.delete(instance)
 		child_thread:delete()
 	end
 	for _,callback in pairs(instance.callbacks) do
-		print("Detached "..tostring(callback))
 		callback:detach()
 	end
 	remove(instance.parent_thread.threads,instance.pid)
