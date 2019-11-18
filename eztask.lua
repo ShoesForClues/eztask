@@ -26,7 +26,7 @@ local eztask={
 	_version = {2,0,8};
 	imports  = {};
 	threads  = {};
-	step_frequency=60;
+	step_frequency=1/60;
 }
 
 eztask.imports.eztask=eztask --wtf
@@ -118,10 +118,10 @@ function _thread.sleep(instance,d)
 	return eztask.tick()-raw_tick
 end
 
-function _thread.yield(instance,duration)
+function _thread.yield(instance)
 	local current_thread=eztask.current_thread
 	local frame_time=eztask.tick()-current_thread.raw_tick
-	if frame_time>=(duration or (1/eztask.step_frequency)/#current_thread.parent_thread.threads) then
+	if frame_time>=eztask.step_frequency/#current_thread.parent_thread.threads then
 		return current_thread:sleep(0)
 	end
 	return 0
@@ -139,6 +139,7 @@ function _thread.resume(instance,dt,...)
 			sub_thread:resume(dt)
 		end
 		eztask.assert(resume(instance.coroutine,eztask._scope,...))
+		instance.usage=(eztask.tick()-instance.raw_tick)/(eztask.step_frequency/#instance.parent_thread.threads)
 		eztask.current_thread=previous_thread
 	end
 end
@@ -228,6 +229,7 @@ function eztask.new_thread(env,parent_thread)
 		tick          = 0;
 		raw_tick      = 0;
 		resume_tick   = 0;
+		usage         = 0;
 		resume_state  = false;
 		parent_thread = parent_thread or eztask;
 		env           = env;
