@@ -26,6 +26,7 @@ local eztask={
 	_version = {2,0,8};
 	imports  = {};
 	threads  = {};
+	step_frequency=60;
 }
 
 eztask.imports.eztask=eztask --wtf
@@ -36,6 +37,7 @@ eztask._scope=setmetatable({},{
 })
 
 --Native Functions
+local remove = table.remove
 local unpack = unpack or table.unpack
 local create = coroutine.create
 local resume = coroutine.resume
@@ -116,8 +118,18 @@ function _thread.sleep(instance,d)
 	return eztask.tick()-raw_tick
 end
 
+function _thread.yield(instance,duration)
+	local current_thread=eztask.current_thread
+	local frame_time=eztask.tick()-current_thread.raw_tick
+	if frame_time>=(duration or (1/eztask.step_frequency)/#current_thread.parent_thread.threads) then
+		return current_thread:sleep(0)
+	end
+	return 0
+end
+
 function _thread.resume(instance,dt,...)
 	instance.tick=instance.tick+(dt or 0)
+	instance.raw_tick=eztask.tick()
 	if status(instance.coroutine)=="dead" then
 		instance:delete()
 	elseif instance.running.value==true and instance.resume_tick<=instance.tick then
@@ -140,6 +152,7 @@ function _thread.delete(instance)
 		print("Detached "..tostring(callback))
 		callback:detach()
 	end
+	remove(instance.parent_thread.threads,instance.pid)
 	instance.imports={}
 	instance.coroutine=nil
 	instance.parent_thread.threads[instance]=nil
@@ -153,7 +166,8 @@ function _thread.init(instance,...)
 	instance.running.value=true
 	instance.resume_state=true
 	instance.coroutine=create(instance.env)
-	instance.parent_thread.threads[instance]=instance
+	instance.pid=#instance.parent_thread.threads+1
+	instance.parent_thread.threads[instance.pid]=instance
 	if eztask.thread_init~=nil then
 		eztask.thread_init(instance)
 	end
@@ -210,7 +224,9 @@ function eztask.new_thread(env,parent_thread)
 	local thread={
 		running       = eztask.new_property(false);
 		killed        = eztask.new_signal();
+		pid           = 0;
 		tick          = 0;
+		raw_tick      = 0;
 		resume_tick   = 0;
 		resume_state  = false;
 		parent_thread = parent_thread or eztask;
