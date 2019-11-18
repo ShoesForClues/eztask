@@ -101,19 +101,17 @@ function _thread.sleep(instance,d)
 	local raw_tick=eztask.tick() or 0
 	if d==nil or type(d)=="number" then
 		eztask.current_thread.resume_tick=eztask.current_thread.tick+(d or 0)
+	elseif type(d)=="table" and (getmetatable(d)==_signal or getmetatable(d)==_property) then
+		local current_thread,bind=eztask.current_thread
+		current_thread.resume_tick=math.huge
+		bind=d:attach(function()
+			bind:detach()
+			current_thread.resume_tick=current_thread.tick
+			current_thread:resume()
+		end,true)
 	else
-		local type=getmetatable(d)
-		if type==_signal or type==_property then
-			local current_thread,bind=eztask.current_thread
-			current_thread.resume_tick=math.huge
-			bind=d:attach(function()
-				bind:detach()
-				current_thread.resume_tick=current_thread.tick
-				current_thread:resume()
-			end,true)
-		else
-			eztask.error("Cannot yield thread with "..type(d))
-		end
+		eztask.current_thread:delete()
+		eztask.error("Cannot yield thread with "..type(d))
 	end
 	yield()
 	return eztask.tick()-raw_tick
