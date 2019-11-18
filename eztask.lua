@@ -110,7 +110,6 @@ function _thread.sleep(instance,d)
 			current_thread:resume()
 		end,true)
 	else
-		eztask.current_thread:delete()
 		eztask.error("Cannot yield thread with "..type(d))
 	end
 	yield()
