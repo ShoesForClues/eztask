@@ -63,6 +63,7 @@ _property.__index=function(t,k)
 	return _signal[k]
 end
 _property.__newindex=function(t,k,v)
+	eztask.assert(k=="value",("Cannot assign %s to property"):format(k))
 	local old=rawget(t,"_value")
 	if v~=old then
 		rawset(t,"_value",v)
@@ -98,7 +99,7 @@ end
 
 function _thread.sleep(instance,d)
 	local raw_tick=eztask.tick() or 0
-	if type(d)=="number" then
+	if d==nil or type(d)=="number" then
 		eztask.current_thread.resume_tick=eztask.current_thread.tick+(d or 0)
 	else
 		local type=getmetatable(d)
@@ -110,6 +111,8 @@ function _thread.sleep(instance,d)
 				current_thread.resume_tick=current_thread.tick
 				current_thread:resume()
 			end,true)
+		else
+			eztask.error("Cannot yield thread with "..type(d))
 		end
 	end
 	yield()
@@ -137,8 +140,10 @@ function _thread.delete(instance)
 		child_thread:delete()
 	end
 	for _,callback in pairs(instance.callbacks) do
+		print("Detached "..tostring(callback))
 		callback:detach()
 	end
+	instance.imports={}
 	instance.coroutine=nil
 	instance.parent_thread.threads[instance]=nil
 	instance.killed:invoke()
