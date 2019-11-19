@@ -101,8 +101,9 @@ end
 
 function _thread.sleep(instance,d)
 	local raw_tick=eztask.tick() or 0
-	if d==nil or type(d)=="number" then
-		eztask.current_thread.resume_tick=eztask.current_thread.tick+(d or 0)
+	d=d or 0
+	if type(d)=="number" then
+		eztask.current_thread.resume_tick=eztask.current_thread.tick+d
 	elseif type(d)=="table" and (getmetatable(d)==_signal or getmetatable(d)==_property) then
 		local current_thread,bind=eztask.current_thread
 		current_thread.resume_tick=math.huge
@@ -120,8 +121,7 @@ end
 
 function _thread.yield(instance)
 	local current_thread=eztask.current_thread
-	local frame_time=eztask.tick()-current_thread.raw_tick
-	if frame_time>=eztask.step_frequency/(#current_thread.parent_thread.threads-#current_thread.parent_thread.threads*current_thread.usage/2) then
+	if eztask.tick()-current_thread.raw_tick>=eztask.step_frequency/(#current_thread.parent_thread.threads-#current_thread.parent_thread.threads*current_thread.usage/2) then
 		return current_thread:sleep(0)
 	end
 	return 0
