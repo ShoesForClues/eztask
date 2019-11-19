@@ -23,6 +23,7 @@ eztask.new_thread(function(thread)
       --Blah blah blah
       thread:yield() --This will ensure the thread uses as much CPU resources available without blocking
     end
+    print(("Thread %d usage: %f"):format(thread.pid,thread.usage*100))
   end
 end):init()
 ```
