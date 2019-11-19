@@ -5,15 +5,24 @@ This library will work with any platform that uses Lua, including LÖVE, Corona,
 
 # Example Usage
 ```lua
-local thread_a=eztask.new_thread(function(thread)
+eztask.new_thread(function(thread)
   while thread:sleep(1) do
     print("Apples")
   end
 end):init()
 
-local thread_b=eztask.new_thread(function(thread)
+eztask.new_thread(function(thread)
   while thread:sleep(0.5) do
     print("Oranges")
+  end
+end):init()
+
+eztask.new_thread(function(thread)
+  while true do
+    for i=1,100000000 do --Do some heavy calculation
+      --Blah blah blah
+      thread:yield() --This will ensure the thread uses as much CPU resources available without blocking
+    end
   end
 end):init()
 ```
@@ -34,9 +43,10 @@ eztask.new_thread(function(thread,arg1)
   
   --[[
   NOTE: Invoking the signal will create a new thread each time. This may add overhead. If you do not wish 
-  to create a thread, pass a boolean as a second argument when attaching to the callback.
+  to create a thread, pass a boolean as a second argument when attaching to the callback. Doing so will 
+  also prevent you from accessing the parent thread's libraries.
   Also note any callback attachments within the thread without passing the boolean parameter will 
-  automatically be detached if the thread is killed
+  automatically be detached once the thread is killed.
   ]]
   local render_callback=render:attach(function()
     thread.lib.dosomething()
