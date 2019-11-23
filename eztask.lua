@@ -120,7 +120,7 @@ end
 
 function _thread.yield(instance) --uwu yes faster senpai!
 	local current_thread=eztask.current_thread
-	if eztask.tick()-current_thread.raw_tick>=current_thread.time_out then
+	if eztask.tick()-current_thread.raw_tick>=current_thread.timeout then
 		return current_thread:sleep(0)
 	end
 	return 0
@@ -139,7 +139,7 @@ function _thread.resume(instance,dt,...)
 		end
 		eztask.assert(resume(instance.coroutine,eztask._scope,...))
 		instance.usage=(eztask.tick()-instance.raw_tick)/eztask.step_frequency
-		instance.time_out=eztask.step_frequency/(#instance.parent_thread.threads-#instance.parent_thread.threads*instance.usage/2)
+		instance.timeout=eztask.step_frequency/(#instance.parent_thread.threads-#instance.parent_thread.threads*instance.usage/2)
 		eztask.current_thread=previous_thread
 	end
 end
@@ -234,7 +234,7 @@ function eztask.new_thread(env,parent_thread)
 		raw_tick      = 0;
 		resume_tick   = 0;
 		usage         = 0;
-		time_out      = eztask.step_frequency/#(parent_thread or eztask).threads;
+		timeout       = eztask.step_frequency/#(parent_thread or eztask).threads;
 		resume_state  = false;
 		parent_thread = parent_thread or eztask;
 		env           = env;
