@@ -1,6 +1,6 @@
 --[[
 EZTask written by ShoesForClues Copyright (c) 2018-2019
-	
+
 MIT License
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -119,9 +119,11 @@ function _thread.sleep(instance,d)
 	return eztask.tick()-raw_tick
 end
 
-function _thread.yield(instance)
+function _thread.yield(instance) --uwu yes faster senpai!
 	local current_thread=eztask.current_thread
-	if eztask.tick()-current_thread.raw_tick>=eztask.step_frequency/(#current_thread.parent_thread.threads-#current_thread.parent_thread.threads*current_thread.usage/2) then
+	local frame_time=eztask.tick()-current_thread.raw_tick
+	local timeout=eztask.step_frequency/(#current_thread.parent_thread.threads-#current_thread.parent_thread.threads*current_thread.usage/2) --Not the best accuracy
+	if frame_time>=timeout then
 		return current_thread:sleep(0)
 	end
 	return 0
@@ -146,17 +148,16 @@ end
 
 function _thread.delete(instance)
 	instance.running.value=false
+	instance.killed:invoke()
 	for _,child_thread in pairs(instance.threads) do
 		child_thread:delete()
 	end
 	for _,callback in pairs(instance.callbacks) do
 		callback:detach()
 	end
-	remove(instance.parent_thread.threads,instance.pid)
 	instance.imports={}
 	instance.coroutine=nil
-	instance.parent_thread.threads[instance]=nil
-	instance.killed:invoke()
+	instance.parent_thread.threads[instance.pid]=nil
 end
 
 function _thread.init(instance,...)
@@ -175,16 +176,24 @@ function _thread.init(instance,...)
 	return thread
 end
 
+function _thread.new_thread(env)
+	return eztask.new_thread(env,eztask.current_thread)
+end
+
 function _signal.attach(instance,call,no_thread)
 	eztask.assert(type(call)=="function",("Cannot attach %s to callback."):format(type(call)))
-	local callback={call=call}
+	local callback={index=#instance.callbacks+1,call=call}
 	function callback:detach()
-		instance.callbacks[self]=nil
+		for i=self.index,1,-1 do
+			if instances.callbacks[i]==self then
+				remove(instances.callbacks,i);break
+			end
+		end
 		if self.parent_thread~=nil then
 			self.parent_thread.callbacks[self]=nil
 		end
 	end
-	instance.callbacks[callback]=callback
+	instance.callbacks[callback.index]=callback
 	if not no_thread and eztask.current_thread then
 		callback.parent_thread=eztask.current_thread
 		eztask.current_thread.callbacks[callback]=callback
@@ -193,7 +202,9 @@ function _signal.attach(instance,call,no_thread)
 end
 
 function _signal.invoke(instance,...)
-	for _,callback in pairs(instance.callbacks) do
+	local callback
+	for i=1,#instance.callbacks do
+		callback=instance.callbacks[i]
 		if callback.parent_thread then
 			local args={...}
 			eztask.new_thread(function()
@@ -205,22 +216,18 @@ function _signal.invoke(instance,...)
 	end
 end
 
-function _thread.new_thread(env)
-	return eztask.new_thread(env,eztask.current_thread)
-end
-
 function eztask.new_signal()
 	return setmetatable({callbacks={}},_signal)
 end
 
-function eztask.new_property(value)	
+function eztask.new_property(value)
 	return setmetatable({callbacks={},_value=value},_property)
 end
 
 function eztask.new_thread(env,parent_thread)
 	if type(env)=="string" then env=eztask.require(env) or env end
 	eztask.assert(type(env)=="function","Cannot create thread with invalid environment")
-	
+
 	local thread={
 		running       = eztask.new_property(false);
 		killed        = eztask.new_signal();
@@ -236,7 +243,7 @@ function eztask.new_thread(env,parent_thread)
 		callbacks     = {};
 		imports       = {};
 	}
-	
+
 	thread.running:attach(function(state)
 		if state==true then
 			for _,sub_thread in pairs(thread.threads) do
@@ -249,10 +256,10 @@ function eztask.new_thread(env,parent_thread)
 			end
 		end
 	end,true)
-	
+
 	setmetatable(thread.imports,{__index=(thread.parent_thread or eztask).imports})
 	setmetatable(thread,_thread)
-	
+
 	return thread
 end
 
@@ -261,5 +268,5 @@ function eztask:step(dt)
 		thread:resume(dt)
 	end
 end
-	
+
 return eztask
