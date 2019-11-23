@@ -73,21 +73,18 @@ _property.__newindex=function(t,k,v)
 	end
 end
 
-function _thread.import(instance,source,name,not_sandboxed)
-	eztask.assert(source~=nil,"Cannot import from nil")
+function _thread.import(instance,path,name,not_sandboxed)
+	eztask.assert(path~=nil,"Cannot import from nil")
 	if name==nil then
-		if type(source)=="string" then
-			name=source:sub((source:match("^.*()/") or 0)+1,#source)
+		if type(path)=="string" then
+			name=path:sub((path:match("^.*()/") or 0)+1,#path)
 		else
-			eztask.error("Cannot import "..type(source).." without a name")
+			eztask.error("Cannot import "..type(path).." without a name")
 		end
 	else
 		name=tostring(name)
 	end
-	local did_require,return_source=pcall(eztask.require,source)
-	if did_require then
-		source=return_source
-	end
+	local source=eztask.require(path)
 	if type(source)=="function" and not not_sandboxed then
 		source=source(eztask._scope)
 	end
