@@ -164,6 +164,7 @@ function _thread.init(instance,...)
 	instance.coroutine=create(instance.env)
 	instance.pid=#instance.parent_thread.threads+1
 	instance.parent_thread.threads[instance.pid]=instance
+	setmetatable(instance.imports,{__index=(instance.parent_thread or eztask).imports})
 	if eztask.thread_init~=nil then
 		eztask.thread_init(instance)
 	end
@@ -252,11 +253,8 @@ function eztask.new_thread(env,parent_thread)
 			end
 		end
 	end,true)
-
-	setmetatable(thread.imports,{__index=(thread.parent_thread or eztask).imports})
-	setmetatable(thread,_thread)
-
-	return thread
+	
+	return setmetatable(thread,_thread)
 end
 
 function eztask:step(dt)
