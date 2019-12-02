@@ -23,7 +23,7 @@ SOFTWARE.
 ]]
 
 local eztask={
-	_version = {2,0,8};
+	_version = {2,0,9};
 	imports  = {};
 	threads  = {};
 	step_frequency = 1/60;
@@ -32,11 +32,15 @@ local eztask={
 eztask.imports.eztask=eztask --wtf
 eztask._scope=setmetatable({},{
 	__index=function(_,k)
-		return eztask.current_thread[k] or eztask.current_thread.imports[k]
+		if k~="_instance" then
+			return eztask.current_thread[k] or eztask.current_thread.imports[k]
+		end
+		return eztask.current_thread
 	end
 })
 
---Native Functions
+--Primitives
+local huge   = math.huge
 local remove = table.remove
 local unpack = unpack or table.unpack
 local create = coroutine.create
@@ -79,7 +83,7 @@ function _thread.import(instance,path,name,not_sandboxed)
 		if type(path)=="string" then
 			name=path:sub((path:match("^.*()/") or 0)+1,#path)
 		else
-			eztask.error("Cannot import "..type(path).." without a name")
+			eztask.error(("Cannot import %s without a name"):format(path))
 		end
 	else
 		name=tostring(name)
@@ -97,12 +101,12 @@ function _thread.depend(instance,name)
 end
 
 function _thread.sleep(instance,d)
-	local raw_tick=eztask.tick() or 0
+	local raw_tick=eztask.tick()
 	if d==nil or type(d)=="number" then
 		eztask.current_thread.resume_tick=eztask.current_thread.tick+(d or 0)
 	elseif type(d)=="table" and (getmetatable(d)==_signal or getmetatable(d)==_property) then
 		local current_thread,bind=eztask.current_thread
-		current_thread.resume_tick=math.huge
+		current_thread.resume_tick=huge
 		bind=d:attach(function()
 			bind:detach()
 			current_thread.resume_tick=current_thread.tick
@@ -143,7 +147,6 @@ end
 
 function _thread.delete(instance)
 	instance.running.value=false
-	instance.killed:invoke()
 	for _,child_thread in pairs(instance.threads) do
 		child_thread:delete()
 	end
@@ -153,6 +156,7 @@ function _thread.delete(instance)
 	instance.imports={}
 	instance.coroutine=nil
 	instance.parent_thread.threads[instance.pid]=nil
+	instance.killed:invoke()
 end
 
 function _thread.init(instance,...)
@@ -181,8 +185,8 @@ function _signal.attach(instance,call,no_thread)
 	local callback={index=#instance.callbacks+1,call=call}
 	function callback:detach()
 		for i=self.index,1,-1 do
-			if instances.callbacks[i]==self then
-				remove(instances.callbacks,i);break
+			if instance.callbacks[i]==self then
+				remove(instance.callbacks,i);break
 			end
 		end
 		if self.parent_thread~=nil then
