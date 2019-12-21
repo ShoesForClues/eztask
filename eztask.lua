@@ -22,8 +22,17 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ]]
 
+local huge   = math.huge
+local remove = table.remove
+local unpack = unpack or table.unpack
+local create = coroutine.create
+local resume = coroutine.resume
+local yield  = coroutine.yield
+local status = coroutine.status
+local wrap   = coroutine.wrap
+
 local eztask={
-	_version = {2,0,9};
+	_version = {2,1,0};
 	imports  = {};
 	threads  = {};
 	step_frequency = 1/60;
@@ -38,16 +47,6 @@ eztask._scope=setmetatable({},{
 		return eztask.current_thread
 	end
 })
-
---Primitives
-local huge   = math.huge
-local remove = table.remove
-local unpack = unpack or table.unpack
-local create = coroutine.create
-local resume = coroutine.resume
-local yield  = coroutine.yield
-local status = coroutine.status
-local wrap   = coroutine.wrap
 
 --Wrapped Functions
 eztask.assert  = assert
@@ -77,7 +76,7 @@ _property.__newindex=function(t,k,v)
 	end
 end
 
-function _thread.import(instance,path,name,not_sandboxed)
+function _thread.import(instance,path,name)
 	eztask.assert(path~=nil,"Cannot import from nil")
 	if name==nil then
 		if type(path)=="string" then
@@ -89,7 +88,7 @@ function _thread.import(instance,path,name,not_sandboxed)
 		name=tostring(name)
 	end
 	local source=eztask.require(path)
-	if type(source)=="function" and not not_sandboxed then
+	if type(source)=="function" then
 		source=source(eztask._scope)
 	end
 	instance.imports[name]=source
@@ -98,6 +97,7 @@ end
 
 function _thread.depend(instance,name)
 	eztask.assert(instance.imports[name]~=nil,"Missing dependency: "..name)
+	return instance.imports[name]
 end
 
 function _thread.sleep(instance,d)
@@ -119,7 +119,7 @@ function _thread.sleep(instance,d)
 	return eztask.tick()-raw_tick
 end
 
-function _thread.yield(instance) --uwu yes faster senpai!
+function _thread.yield(instance)
 	local current_thread=eztask.current_thread
 	if eztask.tick()-current_thread.raw_tick>=current_thread.timeout then
 		return current_thread:sleep(0)
@@ -155,7 +155,7 @@ function _thread.delete(instance)
 	end
 	instance.imports={}
 	instance.coroutine=nil
-	instance.parent_thread.threads[instance.pid]=nil
+	instance.parent_thread.threads[instance]=nil
 	instance.killed:invoke()
 end
 
@@ -166,8 +166,7 @@ function _thread.init(instance,...)
 	instance.running.value=true
 	instance.resume_state=true
 	instance.coroutine=create(instance.env)
-	instance.pid=#instance.parent_thread.threads+1
-	instance.parent_thread.threads[instance.pid]=instance
+	instance.parent_thread.threads[instance]=instance
 	setmetatable(instance.imports,{__index=(instance.parent_thread or eztask).imports})
 	if eztask.thread_init~=nil then
 		eztask.thread_init(instance)
@@ -231,7 +230,6 @@ function eztask.new_thread(env,parent_thread)
 	local thread={
 		running       = eztask.new_property(false);
 		killed        = eztask.new_signal();
-		pid           = 0;
 		tick          = 0;
 		raw_tick      = 0;
 		resume_tick   = 0;
