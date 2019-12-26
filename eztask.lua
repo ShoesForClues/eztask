@@ -1,5 +1,5 @@
 --[[
-EZTask written by ShoesForClues Copyright (c) 2018-2019
+EZTask written by ShoesForClues Copyright (c) 2019
 
 MIT License
 
@@ -22,17 +22,18 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ]]
 
-local huge   = math.huge
-local remove = table.remove
-local unpack = unpack or table.unpack
-local create = coroutine.create
-local resume = coroutine.resume
-local yield  = coroutine.yield
-local status = coroutine.status
-local wrap   = coroutine.wrap
+local huge    = math.huge
+local remove  = table.remove
+local unpack  = unpack or table.unpack
+local create  = coroutine.create
+local resume  = coroutine.resume
+local yield   = coroutine.yield
+local status  = coroutine.status
+local wrap    = coroutine.wrap
+local running = coroutine.running
 
 local eztask={
-	_version = {2,1,0};
+	_version = {2,1,1};
 	imports  = {};
 	threads  = {};
 	step_frequency = 1/60;
@@ -60,7 +61,24 @@ local _signal   = {}
 local _property = {}
 
 _thread.__index=_thread
+_thread.__call=function(instance,...)
+	if instance.coroutine~=nil then
+		instance:delete()
+	end
+	instance.running.value=true
+	instance.resume_state=true
+	instance.coroutine=create(instance.env)
+	instance.parent_thread.threads[instance]=instance
+	setmetatable(instance.imports,{__index=(instance.parent_thread or eztask).imports})
+	if eztask.thread_init~=nil then
+		eztask.thread_init(instance)
+	end
+	instance:resume(0,...)
+	return thread
+end
+
 _signal.__index=_signal
+
 _property.__index=function(t,k)
 	if k=="value" then
 		return rawget(t,"_value")
@@ -159,22 +177,6 @@ function _thread.delete(instance)
 	instance.killed:invoke()
 end
 
-function _thread.init(instance,...)
-	if instance.coroutine~=nil then
-		instance:delete()
-	end
-	instance.running.value=true
-	instance.resume_state=true
-	instance.coroutine=create(instance.env)
-	instance.parent_thread.threads[instance]=instance
-	setmetatable(instance.imports,{__index=(instance.parent_thread or eztask).imports})
-	if eztask.thread_init~=nil then
-		eztask.thread_init(instance)
-	end
-	instance:resume(0,...)
-	return thread
-end
-
 function _thread.new_thread(env)
 	return eztask.new_thread(env,eztask.current_thread)
 end
@@ -208,7 +210,7 @@ function _signal.invoke(instance,...)
 			local args={...}
 			eztask.new_thread(function()
 				callback.call(unpack(args))
-			end,callback.parent_thread):init()
+			end,callback.parent_thread)()
 		else
 			callback.call(...)
 		end
