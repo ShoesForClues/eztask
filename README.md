@@ -9,13 +9,13 @@ eztask.new_thread(function(thread)
   while thread:sleep(1) do
     print("Apples")
   end
-end):init()
+end)()
 
 eztask.new_thread(function(thread)
   while thread:sleep(0.5) do
     print("Oranges")
   end
-end):init()
+end)()
 
 eztask.new_thread(function(thread)
   while true do
@@ -25,7 +25,7 @@ eztask.new_thread(function(thread)
     end
     print(("Thread %d usage: %f"):format(thread.pid,thread.usage*100))
   end
-end):init()
+end)()
 ```
 
 # How to use in LÖVE
@@ -63,10 +63,10 @@ eztask.new_thread(function(thread,arg1)
       print(arg1)
       thread.lib.doayield() --You can reference the parent thread's libraries instead of reimporting
     end
-  end):init()
+  end)()
 
   while thread:wait() do end --Keep the thread alive
-end):init("hi")
+end)("hi")
 ```
 
 # Creating a library
@@ -109,7 +109,7 @@ local a=eztask.new_thread(function(thread)
     print(thread.something)
     thread:sleep(1)
   end
-end):init()
+end)()
 
 a.running:attach(function(state)
   if state then
@@ -130,7 +130,7 @@ eztask.new_thread(function(thread)
   a.running.value=true --Resume
   thread:sleep(3)
   a:delete() --Kill the thread
-end):init()
+end)()
 
 --If you wish to reset a thread, simply call init() again
 ```
