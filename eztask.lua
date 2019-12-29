@@ -33,7 +33,7 @@ local wrap    = coroutine.wrap
 local running = coroutine.running
 
 local eztask={
-	_version = {2,1,1};
+	_version = {2,1,2};
 	imports  = {};
 	threads  = {};
 	step_frequency = 1/60;
@@ -74,7 +74,7 @@ _thread.__call=function(instance,...)
 		eztask.thread_init(instance)
 	end
 	instance:resume(0,...)
-	return thread
+	return instance
 end
 
 _signal.__index=_signal
@@ -123,7 +123,8 @@ function _thread.sleep(instance,d)
 	if d==nil or type(d)=="number" then
 		eztask.current_thread.resume_tick=eztask.current_thread.tick+(d or 0)
 	elseif type(d)=="table" and (getmetatable(d)==_signal or getmetatable(d)==_property) then
-		local current_thread,bind=eztask.current_thread
+		local current_thread=eztask.current_thread
+		local bind
 		current_thread.resume_tick=huge
 		bind=d:attach(function()
 			bind:detach()
@@ -148,15 +149,18 @@ end
 function _thread.resume(instance,dt,...)
 	instance.tick=instance.tick+(dt or 0)
 	instance.raw_tick=eztask.tick()
-	if instance.coroutine==nil or status(instance.coroutine)=="dead" then
-		instance:delete()
-	elseif instance.running.value==true and instance.resume_tick<=instance.tick then
+	if status(instance.coroutine)=="dead" and next(instance.callbacks)==nil and next(instance.threads)==nil then
+		return instance:delete()
+	end
+	if instance.running.value==true and instance.resume_tick<=instance.tick then
 		local previous_thread=eztask.current_thread
-		eztask.current_thread=instance
+		if status(instance.coroutine)=="suspended" then
+			eztask.current_thread=instance
+			eztask.assert(resume(instance.coroutine,eztask._scope,...))
+		end
 		for _,sub_thread in pairs(instance.threads) do
 			sub_thread:resume(dt)
 		end
-		eztask.assert(resume(instance.coroutine,eztask._scope,...))
 		instance.usage=(eztask.tick()-instance.raw_tick)/eztask.step_frequency
 		instance.timeout=eztask.step_frequency/(#instance.parent_thread.threads-#instance.parent_thread.threads*instance.usage/2)
 		eztask.current_thread=previous_thread
@@ -171,8 +175,7 @@ function _thread.delete(instance)
 	for _,callback in pairs(instance.callbacks) do
 		callback:detach()
 	end
-	instance.imports={}
-	instance.coroutine=nil
+	instance.imports=setmetatable({},{__index=(instance.parent_thread or eztask).imports})
 	instance.parent_thread.threads[instance]=nil
 	instance.killed:invoke()
 end
@@ -190,22 +193,24 @@ function _signal.attach(instance,call,no_thread)
 				remove(instance.callbacks,i);break
 			end
 		end
-		if self.parent_thread~=nil then
+		if self.parent_thread~=nil and self.parent_thread~=eztask then
 			self.parent_thread.callbacks[self]=nil
 		end
 	end
 	instance.callbacks[callback.index]=callback
-	if not no_thread and eztask.current_thread then
-		callback.parent_thread=eztask.current_thread
-		eztask.current_thread.callbacks[callback]=callback
+	if not no_thread then
+		if eztask.current_thread then
+			callback.parent_thread=eztask.current_thread
+			eztask.current_thread.callbacks[callback]=callback
+		else
+			callback.parent_thread=eztask
+		end
 	end
 	return callback
 end
 
 function _signal.invoke(instance,...)
-	local callback
-	for i=1,#instance.callbacks do
-		callback=instance.callbacks[i]
+	for _,callback in pairs(instance.callbacks) do
 		if callback.parent_thread then
 			local args={...}
 			eztask.new_thread(function()
