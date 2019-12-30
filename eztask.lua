@@ -22,18 +22,19 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ]]
 
-local huge    = math.huge
-local remove  = table.remove
-local unpack  = unpack or table.unpack
-local create  = coroutine.create
-local resume  = coroutine.resume
-local yield   = coroutine.yield
-local status  = coroutine.status
-local wrap    = coroutine.wrap
-local running = coroutine.running
+local huge      = math.huge
+local remove    = table.remove
+local unpack    = unpack or table.unpack
+local create    = coroutine.create
+local resume    = coroutine.resume
+local yield     = coroutine.yield
+local status    = coroutine.status
+local wrap      = coroutine.wrap
+local running   = coroutine.running
+local traceback = debug.traceback
 
 local eztask={
-	_version = {2,1,2};
+	_version = {2,1,3};
 	imports  = {};
 	threads  = {};
 	step_frequency = 1/60;
@@ -149,14 +150,19 @@ end
 function _thread.resume(instance,dt,...)
 	instance.tick=instance.tick+(dt or 0)
 	instance.raw_tick=eztask.tick()
-	if status(instance.coroutine)=="dead" and next(instance.callbacks)==nil and next(instance.threads)==nil then
-		return instance:delete()
+	if status(instance.coroutine)=="dead" then
+		if next(instance.callbacks)==nil and next(instance.threads)==nil then
+			return instance:delete()
+		end
 	end
 	if instance.running.value==true and instance.resume_tick<=instance.tick then
 		local previous_thread=eztask.current_thread
 		if status(instance.coroutine)=="suspended" then
 			eztask.current_thread=instance
-			eztask.assert(resume(instance.coroutine,eztask._scope,...))
+			local success,err=resume(instance.coroutine,eztask._scope,...)
+			if not success then
+				print(traceback(instance.coroutine,err,2))
+			end
 		end
 		for _,sub_thread in pairs(instance.threads) do
 			sub_thread:resume(dt)
