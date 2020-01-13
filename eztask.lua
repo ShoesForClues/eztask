@@ -44,10 +44,10 @@ eztask.imports.eztask=eztask --wtf
 eztask._scope=setmetatable({},{
 	__index=function(_,k)
 		local _coroutine=running()
-		if k~="_thread" then
-			return eztask.threads[_coroutine][k] or eztask.threads[_coroutine].imports[k]
+		if k=="_thread" then
+			return eztask.threads[_coroutine]
 		end
-		return eztask.threads[_coroutine]
+		return eztask.threads[_coroutine][k] or eztask.threads[_coroutine].imports[k]
 	end
 })
 
@@ -261,6 +261,7 @@ function thread.kill(_thread)
 	_thread.imports={}
 	_thread.parent_thread.threads[_thread.coroutine]=nil
 	eztask.threads[_thread.coroutine]=nil
+	_thread.coroutine=nil
 	_thread.killed.value=true
 end
 
