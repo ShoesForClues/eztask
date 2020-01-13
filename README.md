@@ -1,7 +1,7 @@
 # eztask
 A task scheduler written in Lua
 
-This library will work with any platform that uses Lua, including LÖVE, Corona, etc..
+This library will work with any platform that uses Lua and abides with foreign asynchronous calls.
 
 # Example Usage
 ```lua
