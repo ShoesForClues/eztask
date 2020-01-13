@@ -39,18 +39,16 @@ eztask.thread.new(function(thread,arg1)
   NOTE: Invoking the signal will create a new thread each time. This may add overhead. If you do not wish 
   to create a thread, pass a boolean as a second argument when attaching to the callback. Doing so will 
   also prevent you from accessing the parent thread's libraries.
-  Also note any callback attachments within the thread without passing the boolean parameter will 
-  automatically be detached once the thread is killed.
+  
+  NOTE: Any child threads or callback attachments made within a thread will prevent the thread from being 
+  deleted even when the coroutine is dead. However, calling the delete() methods will delete all child threads 
+  and detach any callbacks.
   ]]
+  
   local render_callback=render:attach(function()
     thread.lib.dosomething()
   end) --To disconnect callback do render_callback:detach()
-
-  --[[
-  NOTE: While you can create child threads, it's recommended to just create a neighbor thread instead. This is 
-  because the child thread will not resume until the parent thread resumes first. The only exception to this 
-  are callbacks. However, that behavior may also change in the future.
-  ]]
+  
   thread.thread.new(function() --You do not need to redefine thread again
     while true do
       print(arg1)
