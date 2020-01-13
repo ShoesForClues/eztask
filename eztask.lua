@@ -34,7 +34,7 @@ local running   = coroutine.running
 local traceback = debug.traceback
 
 local eztask={
-	_version = {2,1,3};
+	_version = {2,1,5};
 	imports  = {};
 	threads  = {};
 	step_frequency = 1/60;
@@ -50,58 +50,75 @@ eztask._scope=setmetatable({},{
 	end
 })
 
---Wrapped Functions
-eztask.assert  = assert
-eztask.error   = error
+--Wrapped
 eztask.require = require
 eztask.tick    = os.clock
 
---Object types
-local _thread   = {}
-local _signal   = {}
-local _property = {}
+--Class Types
+local thread   = {}
+local signal   = {}
+local property = {}
 
-_thread.__index=_thread
-_thread.__call=function(instance,...)
-	if instance.coroutine~=nil then
-		instance:delete()
+------------------------------[Thread Class]------------------------------
+thread.__index=thread
+thread.__call=function(_thread,...)
+	if _thread.coroutine~=nil then
+		_thread:delete()
 	end
-	instance.running.value=true
-	instance.resume_state=true
-	instance.coroutine=create(instance.env)
-	instance.parent_thread.threads[instance]=instance
-	setmetatable(instance.imports,{__index=(instance.parent_thread or eztask).imports})
+	_thread.running.value=true
+	_thread.resume_state=true
+	_thread.coroutine=create(_thread.env)
+	_thread.parent_thread.threads[_thread.coroutine]=_thread
+	setmetatable(_thread.imports,{__index=(_thread.parent_thread or eztask).imports})
 	if eztask.thread_init~=nil then
-		eztask.thread_init(instance)
+		eztask.thread_init(_thread)
 	end
-	instance:resume(0,...)
-	return instance
+	_thread:resume(0,...)
+	return _thread
 end
 
-_signal.__index=_signal
-
-_property.__index=function(t,k)
-	if k=="value" then
-		return rawget(t,"_value")
-	end
-	return _signal[k]
+function thread.new(env,parent_thread)
+	if type(env)~="function" then env=eztask.require(env) or env end
+	assert(type(env)=="function","Cannot create thread with invalid environment")
+	
+	local _thread={
+		running       = property.new(false);
+		killed        = signal.new();
+		resume_state  = false;
+		tick          = 0;
+		real_tick     = 0;
+		resume_tick   = 0;
+		usage         = 0;
+		parent_thread = parent_thread or eztask.current_thread or eztask;
+		env           = env;
+		threads       = {};
+		callbacks     = {};
+		imports       = {};
+	}
+	
+	_thread.running:attach(function(state)
+		if state==true then
+			for _,sub_thread in pairs(_thread.threads) do
+				sub_thread.running.value=sub_thread.resume_state
+			end
+		else
+			for _,sub_thread in pairs(_thread.threads) do
+				sub_thread.resume_state=sub_thread.running.value
+				sub_thread.running.value=false
+			end
+		end
+	end,true)
+	
+	return setmetatable(_thread,thread)
 end
-_property.__newindex=function(t,k,v)
-	eztask.assert(k=="value",("Cannot assign %s to property"):format(k))
-	local old=rawget(t,"_value")
-	if v~=old then
-		rawset(t,"_value",v)
-		t:invoke(v,old)
-	end
-end
 
-function _thread.import(instance,path,name)
-	eztask.assert(path~=nil,"Cannot import from nil")
+function thread.import(_thread,path,name)
+	assert(path~=nil,"Cannot import from nil")
 	if name==nil then
 		if type(path)=="string" then
 			name=path:sub((path:match("^.*()/") or 0)+1,#path)
 		else
-			eztask.error(("Cannot import %s without a name"):format(path))
+			error(("Cannot import %s without a name"):format(path))
 		end
 	else
 		name=tostring(name)
@@ -110,20 +127,20 @@ function _thread.import(instance,path,name)
 	if type(source)=="function" then
 		source=source(eztask._scope)
 	end
-	instance.imports[name]=source
+	_thread.imports[name]=source
 	return source
 end
 
-function _thread.depend(instance,name)
-	eztask.assert(instance.imports[name]~=nil,"Missing dependency: "..name)
-	return instance.imports[name]
+function thread.depend(_thread,name)
+	assert(_thread.imports[name]~=nil,"Missing dependency: "..name)
+	return _thread.imports[name]
 end
 
-function _thread.sleep(instance,d)
-	local raw_tick=eztask.tick()
+function thread.sleep(_thread,d)
+	local real_tick=eztask.tick()
 	if d==nil or type(d)=="number" then
 		eztask.current_thread.resume_tick=eztask.current_thread.tick+(d or 0)
-	elseif type(d)=="table" and (getmetatable(d)==_signal or getmetatable(d)==_property) then
+	elseif type(d)=="table" and (getmetatable(d)==eztask.signal or getmetatable(d)==eztask.property) then
 		local current_thread=eztask.current_thread
 		local bind
 		current_thread.resume_tick=huge
@@ -133,77 +150,76 @@ function _thread.sleep(instance,d)
 			current_thread:resume()
 		end,true)
 	else
-		eztask.error("Cannot yield thread with "..type(d))
+		error("Cannot yield thread with "..type(d))
 	end
 	yield()
-	return eztask.tick()-raw_tick
+	return eztask.tick()-real_tick
 end
 
-function _thread.yield(instance)
-	local current_thread=eztask.current_thread
-	if eztask.tick()-current_thread.raw_tick>=current_thread.timeout then
-		return current_thread:sleep(0)
-	end
-	return 0
-end
-
-function _thread.resume(instance,dt,...)
-	instance.tick=instance.tick+(dt or 0)
-	instance.raw_tick=eztask.tick()
-	if status(instance.coroutine)=="dead" then
-		if next(instance.callbacks)==nil and next(instance.threads)==nil then
-			return instance:delete()
+function thread.resume(_thread,dt,...)
+	if status(_thread.coroutine)=="dead" then
+		if next(_thread.callbacks)==nil and next(_thread.threads)==nil then
+			_thread:delete()
+			return
 		end
 	end
-	if instance.running.value==true and instance.resume_tick<=instance.tick then
+	if _thread.running.value==true then
+		_thread.tick=_thread.tick+(dt or 0)
+		_thread.real_tick=eztask.tick()
+		
 		local previous_thread=eztask.current_thread
-		if status(instance.coroutine)=="suspended" then
-			eztask.current_thread=instance
-			local success,err=resume(instance.coroutine,eztask._scope,...)
+		eztask.current_thread=_thread
+		
+		if status(_thread.coroutine)=="suspended" and _thread.resume_tick<=_thread.tick then
+			local success,err=resume(_thread.coroutine,eztask._scope,...)
 			if not success then
-				print(traceback(instance.coroutine,err,2))
+				print("[ERROR]: "..traceback(_thread.coroutine,err,1))
 			end
 		end
-		for _,sub_thread in pairs(instance.threads) do
+		
+		for _,sub_thread in pairs(_thread.threads) do
 			sub_thread:resume(dt)
 		end
-		instance.usage=(eztask.tick()-instance.raw_tick)/eztask.step_frequency
-		instance.timeout=eztask.step_frequency/(#instance.parent_thread.threads-#instance.parent_thread.threads*instance.usage/2)
+		
+		_thread.usage=(eztask.tick()-_thread.real_tick)/eztask.step_frequency
 		eztask.current_thread=previous_thread
 	end
 end
 
-function _thread.delete(instance)
-	instance.running.value=false
-	for _,child_thread in pairs(instance.threads) do
+function thread.delete(_thread)
+	_thread.running.value=false
+	for _,child_thread in pairs(_thread.threads) do
 		child_thread:delete()
 	end
-	for _,callback in pairs(instance.callbacks) do
+	for _,callback in pairs(_thread.callbacks) do
 		callback:detach()
 	end
-	instance.imports=setmetatable({},{__index=(instance.parent_thread or eztask).imports})
-	instance.parent_thread.threads[instance]=nil
-	instance.killed:invoke()
+	_thread.imports={}
+	_thread.parent_thread.threads[_thread.coroutine]=nil
+	_thread.killed:invoke()
 end
 
-function _thread.new_thread(env)
-	return eztask.new_thread(env,eztask.current_thread)
+------------------------------[Signal Class]------------------------------
+signal.__index=signal
+
+function signal.new()
+	return setmetatable({callbacks={}},signal)
 end
 
-function _signal.attach(instance,call,no_thread)
-	eztask.assert(type(call)=="function",("Cannot attach %s to callback."):format(type(call)))
-	local callback={index=#instance.callbacks+1,call=call}
+function signal.attach(_signal,call,no_thread)
+	assert(type(call)=="function",("Cannot attach %s to callback."):format(type(call)))
+	local callback={index=#_signal.callbacks+1,call=call}
 	function callback:detach()
 		for i=self.index,1,-1 do
-			if instance.callbacks[i]==self then
-				remove(instance.callbacks,i);break
+			if _signal.callbacks[i]==self then
+				remove(_signal.callbacks,i);break
 			end
 		end
 		if self.parent_thread~=nil and self.parent_thread~=eztask then
 			self.parent_thread.callbacks[self]=nil
 		end
 	end
-	instance.callbacks[callback.index]=callback
+	_signal.callbacks[callback.index]=callback
 	if not no_thread then
 		if eztask.current_thread then
 			callback.parent_thread=eztask.current_thread
@@ -215,11 +231,11 @@ function _signal.attach(instance,call,no_thread)
 	return callback
 end
 
-function _signal.invoke(instance,...)
-	for _,callback in pairs(instance.callbacks) do
+function signal.invoke(_signal,...)
+	for _,callback in pairs(_signal.callbacks) do
 		if callback.parent_thread then
 			local args={...}
-			eztask.new_thread(function()
+			thread.new(function()
 				callback.call(unpack(args))
 			end,callback.parent_thread)()
 		else
@@ -228,54 +244,84 @@ function _signal.invoke(instance,...)
 	end
 end
 
+function signal.detach(_signal)
+	for _,callback in pairs(_signal.callbacks) do
+		callback:detach()
+	end
+end
+
+------------------------------[Property Class]------------------------------
+property.__index=function(_property,k)
+	if k=="value" then
+		return rawget(_property,"_value")
+	end
+	return signal[k]
+end
+property.__newindex=function(_property,k,v)
+	assert(k=="value",("Cannot assign %s to property"):format(k))
+	local old=rawget(_property,"_value")
+	if v~=old then
+		rawset(_property,"_value",v)
+		_property:invoke(v,old)
+	end
+end
+
+function property.new(value)
+	return setmetatable({callbacks={},_value=value},property)
+end
+
+--Legacy
 function eztask.new_signal()
-	return setmetatable({callbacks={}},_signal)
+	return setmetatable({callbacks={}},signal)
 end
 
 function eztask.new_property(value)
-	return setmetatable({callbacks={},_value=value},_property)
+	return setmetatable({callbacks={},_value=value},property)
 end
 
 function eztask.new_thread(env,parent_thread)
-	if type(env)=="string" then env=eztask.require(env) or env end
-	eztask.assert(type(env)=="function","Cannot create thread with invalid environment")
-
-	local thread={
+	if type(env)~="function" then env=eztask.require(env) or env end
+	assert(type(env)=="function","Cannot create thread with invalid environment")
+	
+	local _thread={
 		running       = eztask.new_property(false);
 		killed        = eztask.new_signal();
+		resume_state  = false;
 		tick          = 0;
-		raw_tick      = 0;
+		real_tick     = 0;
 		resume_tick   = 0;
 		usage         = 0;
-		timeout       = eztask.step_frequency/#(parent_thread or eztask).threads;
-		resume_state  = false;
 		parent_thread = parent_thread or eztask;
 		env           = env;
 		threads       = {};
 		callbacks     = {};
 		imports       = {};
 	}
-
-	thread.running:attach(function(state)
+	
+	_thread.running:attach(function(state)
 		if state==true then
-			for _,sub_thread in pairs(thread.threads) do
+			for _,sub_thread in pairs(_thread.threads) do
 				sub_thread.running.value=sub_thread.resume_state
 			end
 		else
-			for _,sub_thread in pairs(thread.threads) do
+			for _,sub_thread in pairs(_thread.threads) do
 				sub_thread.resume_state=sub_thread.running.value
 				sub_thread.running.value=false
 			end
 		end
 	end,true)
 	
-	return setmetatable(thread,_thread)
+	return setmetatable(_thread,eztask.thread)
 end
 
 function eztask:step(dt)
-	for _,thread in pairs(eztask.threads) do
-		thread:resume(dt)
+	for _,_thread in pairs(eztask.threads) do
+		_thread:resume(dt)
 	end
 end
+
+eztask.signal   = signal
+eztask.property = property
+eztask.thread   = thread
 
 return eztask
