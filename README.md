@@ -5,27 +5,20 @@ This library will work with any platform that uses Lua, including LÖVE, Corona,
 
 # Example Usage
 ```lua
-eztask.new_thread(function(thread)
+local thread_a=eztask.thread.new(function(thread)
   while thread:sleep(1) do
     print("Apples")
   end
-end)()
+end)
 
-eztask.new_thread(function(thread)
+local thread_b=eztask.thread.new(function(thread)
   while thread:sleep(0.5) do
     print("Oranges")
   end
-end)()
+end)
 
-eztask.new_thread(function(thread)
-  while true do
-    for i=1,100000000 do --Do some heavy calculation
-      --Blah blah blah
-      thread:yield() --This will ensure the thread uses as much CPU resources available without blocking
-    end
-    print(("Thread %d usage: %f"):format(thread.pid,thread.usage*100))
-  end
-end)()
+thread_a()
+thread_b()
 ```
 
 # How to use in LÖVE
@@ -34,12 +27,12 @@ local eztask=require "eztask"
 eztask.tick=love.timer.getTime
 
 --Bind native callback
-local render=eztask.new_signal()
+local render=eztask.signal.new()
 
 function love.update(dt) eztask:step(dt) end
 function love.draw() render:invoke() end
 
-eztask.new_thread(function(thread,arg1)
+eztask.thread.new(function(thread,arg1)
   thread:import "path/to/lib" --Or thread:import("path/to/lib","libname")
   
   --[[
@@ -58,14 +51,12 @@ eztask.new_thread(function(thread,arg1)
   because the child thread will not resume until the parent thread resumes first. The only exception to this 
   are callbacks. However, that behavior may also change in the future.
   ]]
-  thread.new_thread(function() --You do not need to redefine thread again
+  thread.thread.new(function() --You do not need to redefine thread again
     while true do
       print(arg1)
       thread.lib.doayield() --You can reference the parent thread's libraries instead of reimporting
     end
   end)()
-
-  while thread:wait() do end --Keep the thread alive
 end)("hi")
 ```
 
@@ -76,7 +67,7 @@ return function(thread) --You will need to sandbox the library if you wish to ha
   thread:depend "someotherdependency"
 
   local API={
-    random_property=thread.eztask.new_property("hi")
+    random_property=thread.eztask.property.new("hi")
   }
 
   API.random_property:attach(function(new,old)
@@ -94,43 +85,4 @@ return function(thread) --You will need to sandbox the library if you wish to ha
 
   return API
 end
-```
-
-# Some extra features
-Each thread has its own callback for when it is paused/resumed or if it is terminated.
-You can also define a custom init function that is called each time a thread is created.
-```lua
-eztask.thread_init=function(thread)
-  thread.something="Hello World!"
-end
-
-local a=eztask.new_thread(function(thread)
-  while true do
-    print(thread.something)
-    thread:sleep(1)
-  end
-end)()
-
-a.running:attach(function(state)
-  if state then
-    print("Thread resumed")
-  else
-    print("Thread was paused")
-  end
-end)
-
-a.killed:attach(function()
-  print("Thread was killed!")
-end)
-
-eztask.new_thread(function(thread)
-  thread:sleep(3)
-  a.running.value=false --Pause the thread
-  thread:sleep(3)
-  a.running.value=true --Resume
-  thread:sleep(3)
-  a:delete() --Kill the thread
-end)()
-
---If you wish to reset a thread, simply call init() again
 ```
