@@ -40,7 +40,7 @@ eztask.thread.new(function(thread,arg1)
   end) --To disconnect callback do render_callback:detach()
   
   --[[
-  NOTE: Invoking the signal will create a new thread each time. This may add overhead. If you do not wish 
+  NOTE: Invoking the signal will create a new thread each time which may add overhead. If you do not wish 
   to create a thread, pass a boolean as a second argument when attaching to the callback. Doing so will 
   also prevent you from accessing the parent thread's libraries.
   ]]
@@ -54,7 +54,7 @@ eztask.thread.new(function(thread,arg1)
   
   --[[
   NOTE: Any child threads or callback attachments made within a thread will prevent the thread from being 
-  automatically deleted once the coroutine is killed. However, calling the delete() methods will force 
+  automatically deleted once the coroutine is killed. However, calling the kill() method will force 
   all child threads to be deleted and detach all callbacks.
   ]]
 end)("hi")
