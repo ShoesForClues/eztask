@@ -1,5 +1,5 @@
 --[[
-EZTask written by ShoesForClues Copyright (c) 2019
+EZTask written by ShoesForClues Copyright (c) 2020
 
 MIT License
 
@@ -34,7 +34,7 @@ local running   = coroutine.running
 local traceback = debug.traceback
 
 local eztask={
-	_version = {2,1,5};
+	_version = {2,1,6};
 	imports  = {};
 	threads  = {};
 }
@@ -42,10 +42,11 @@ local eztask={
 eztask.imports.eztask=eztask --wtf
 eztask._scope=setmetatable({},{
 	__index=function(_,k)
+		local _coroutine=running()
 		if k~="_thread" then
-			return eztask.current_thread[k] or eztask.current_thread.imports[k]
+			return eztask.threads[_coroutine][k] or eztask.threads[_coroutine].imports[k]
 		end
-		return eztask.current_thread
+		return eztask.threads[_coroutine]
 	end
 })
 
@@ -80,9 +81,10 @@ function signal.attach(_signal,call,no_thread)
 	end
 	_signal.callbacks[callback.index]=callback
 	if not no_thread then
-		if eztask.current_thread then
-			callback.parent_thread=eztask.current_thread
-			eztask.current_thread.callbacks[callback]=callback
+		local current_thread=eztask.threads[running()]
+		if current_thread then
+			callback.parent_thread=current_thread
+			current_thread.callbacks[callback]=callback
 		else
 			callback.parent_thread=eztask
 		end
@@ -133,16 +135,15 @@ end
 thread.__index=thread
 thread.__call=function(_thread,...)
 	if _thread.coroutine~=nil then
-		_thread:delete()
+		_thread:kill()
 	end
+	_thread.killed.value=false
 	_thread.running.value=true
 	_thread.resume_state=true
 	_thread.coroutine=create(_thread.env)
 	_thread.parent_thread.threads[_thread.coroutine]=_thread
+	eztask.threads[_thread.coroutine]=_thread
 	setmetatable(_thread.imports,{__index=(_thread.parent_thread or eztask).imports})
-	if eztask.thread_init~=nil then
-		eztask.thread_init(_thread)
-	end
 	_thread:resume(0,...)
 	return _thread
 end
@@ -153,12 +154,12 @@ function thread.new(env,parent_thread)
 	
 	local _thread={
 		running       = property.new(false);
-		killed        = signal.new();
+		killed        = property.new(false);
 		resume_state  = false;
 		tick          = 0;
 		resume_tick   = 0;
 		usage         = 0;
-		parent_thread = parent_thread or eztask.current_thread or eztask;
+		parent_thread = parent_thread or eztask.threads[running()] or eztask;
 		env           = env;
 		threads       = {};
 		callbacks     = {};
@@ -207,12 +208,12 @@ end
 
 function thread.sleep(_thread,d)
 	local real_tick=eztask.tick()
+	local current_thread=eztask.threads[running()]
 	if d==nil or type(d)=="number" then
-		eztask.current_thread.resume_tick=eztask.current_thread.tick+(d or 0)
-	elseif type(d)=="table" and (getmetatable(d)==eztask.signal or getmetatable(d)==eztask.property) then
-		local current_thread=eztask.current_thread
+		current_thread.resume_tick=current_thread.tick+(d or 0)
+	elseif type(d)=="table" and (getmetatable(d)==signal or getmetatable(d)==property) then
 		local bind
-		current_thread.resume_tick=huge
+		current_thread.resume_tick=nil
 		bind=d:attach(function()
 			bind:detach()
 			current_thread.resume_tick=current_thread.tick
@@ -228,17 +229,16 @@ end
 function thread.resume(_thread,dt,...)
 	if status(_thread.coroutine)=="dead" then
 		if next(_thread.callbacks)==nil and next(_thread.threads)==nil then
-			_thread:delete()
+			_thread:kill()
 			return
 		end
 	end
 	if _thread.running.value==true then
 		dt=dt or 0
-		local previous_thread=eztask.current_thread
-		eztask.current_thread=_thread
 		local real_tick=eztask.tick()
 		_thread.tick=_thread.tick+dt
-		if status(_thread.coroutine)=="suspended" and _thread.resume_tick<=_thread.tick then
+		if status(_thread.coroutine)=="suspended" and _thread.resume_tick and _thread.resume_tick<=_thread.tick then
+			_thread.resume_tick=nil
 			local success,err=resume(_thread.coroutine,eztask._scope,...)
 			if not success then
 				print("[ERROR]: "..traceback(_thread.coroutine,err,1))
@@ -248,26 +248,28 @@ function thread.resume(_thread,dt,...)
 			sub_thread:resume(dt)
 		end
 		_thread.usage=(eztask.tick()-real_tick)/dt
-		eztask.current_thread=previous_thread
 	end
 end
 
-function thread.delete(_thread)
+function thread.kill(_thread)
 	_thread.running.value=false
 	for _,child_thread in pairs(_thread.threads) do
-		child_thread:delete()
+		child_thread:kill()
 	end
 	for _,callback in pairs(_thread.callbacks) do
 		callback:detach()
 	end
 	_thread.imports={}
 	_thread.parent_thread.threads[_thread.coroutine]=nil
-	_thread.killed:invoke()
+	eztask.threads[_thread.coroutine]=nil
+	_thread.killed.value=true
 end
 
 function eztask:step(dt)
 	for _,_thread in pairs(eztask.threads) do
-		_thread:resume(dt)
+		if _thread.parent_thread==eztask then
+			_thread:resume(dt)
+		end
 	end
 end
 
