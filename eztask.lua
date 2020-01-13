@@ -22,14 +22,12 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ]]
 
-local huge      = math.huge
 local remove    = table.remove
 local unpack    = unpack or table.unpack
 local create    = coroutine.create
 local resume    = coroutine.resume
 local yield     = coroutine.yield
 local status    = coroutine.status
-local wrap      = coroutine.wrap
 local running   = coroutine.running
 local traceback = debug.traceback
 
