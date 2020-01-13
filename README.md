@@ -45,7 +45,7 @@ eztask.thread.new(function(thread,arg1)
   also prevent you from accessing the parent thread's libraries.
   ]]
   
-  thread.thread.new(function() --You do not need to redefine thread again
+  thread.new(function() --You do not need to redefine thread again
     while true do
       print(arg1)
       thread.lib.doayield() --You can reference the parent thread's libraries instead of reimporting
