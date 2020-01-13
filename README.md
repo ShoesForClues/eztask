@@ -35,19 +35,15 @@ function love.draw() render:invoke() end
 eztask.thread.new(function(thread,arg1)
   thread:import "path/to/lib" --Or thread:import("path/to/lib","libname")
   
+  local render_callback=render:attach(function()
+    thread.lib.dosomething()
+  end) --To disconnect callback do render_callback:detach()
+  
   --[[
   NOTE: Invoking the signal will create a new thread each time. This may add overhead. If you do not wish 
   to create a thread, pass a boolean as a second argument when attaching to the callback. Doing so will 
   also prevent you from accessing the parent thread's libraries.
-  
-  NOTE: Any child threads or callback attachments made within a thread will prevent the thread from being 
-  automatically deleted once the coroutine is killed. However, calling the delete() methods will force 
-  all child threads to be deleted and detach all callbacks.
   ]]
-  
-  local render_callback=render:attach(function()
-    thread.lib.dosomething()
-  end) --To disconnect callback do render_callback:detach()
   
   thread.thread.new(function() --You do not need to redefine thread again
     while true do
@@ -55,6 +51,12 @@ eztask.thread.new(function(thread,arg1)
       thread.lib.doayield() --You can reference the parent thread's libraries instead of reimporting
     end
   end)()
+  
+  --[[
+  NOTE: Any child threads or callback attachments made within a thread will prevent the thread from being 
+  automatically deleted once the coroutine is killed. However, calling the delete() methods will force 
+  all child threads to be deleted and detach all callbacks.
+  ]]
 end)("hi")
 ```
 
