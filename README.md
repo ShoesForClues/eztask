@@ -41,8 +41,8 @@ eztask.thread.new(function(thread,arg1)
   also prevent you from accessing the parent thread's libraries.
   
   NOTE: Any child threads or callback attachments made within a thread will prevent the thread from being 
-  deleted even when the coroutine is dead. However, calling the delete() methods will delete all child threads 
-  and detach any callbacks.
+  automatically deleted once the coroutine is killed. However, calling the delete() methods will force 
+  all child threads to be deleted and detach all callbacks.
   ]]
   
   local render_callback=render:attach(function()
