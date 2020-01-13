@@ -34,9 +34,10 @@ local running   = coroutine.running
 local traceback = debug.traceback
 
 local eztask={
-	_version = {2,1,6};
-	imports  = {};
-	threads  = {};
+	_version  = {2,1,6};
+	imports   = {};
+	threads   = {};
+	callbacks = {};
 }
 
 eztask.imports.eztask=eztask --wtf
@@ -70,25 +71,23 @@ function signal.attach(_signal,call,no_thread)
 	assert(type(call)=="function",("Cannot attach %s to callback."):format(type(call)))
 	local callback={index=#_signal.callbacks+1,call=call}
 	function callback:detach()
-		for i=self.index,1,-1 do
-			if _signal.callbacks[i]==self then
+		for i=callback.index,1,-1 do
+			if _signal.callbacks[i]==callback then
 				remove(_signal.callbacks,i);break
 			end
 		end
-		if self.parent_thread~=nil and self.parent_thread~=eztask then
-			self.parent_thread.callbacks[self]=nil
+		if callback.parent_thread~=nil then
+			callback.parent_thread.callbacks[callback]=nil
 		end
+		eztask.callbacks[callback]=nil
 	end
 	_signal.callbacks[callback.index]=callback
 	if not no_thread then
-		local current_thread=eztask.threads[running()]
-		if current_thread then
-			callback.parent_thread=current_thread
-			current_thread.callbacks[callback]=callback
-		else
-			callback.parent_thread=eztask
-		end
+		local current_thread=eztask.threads[running()] or eztask
+		callback.parent_thread=current_thread
+		current_thread.callbacks[callback]=callback
 	end
+	eztask.callbacks[callback]=callback
 	return callback
 end
 
@@ -107,8 +106,12 @@ end
 
 function signal.detach(_signal)
 	for _,callback in pairs(_signal.callbacks) do
-		callback:detach()
+		if callback.parent_thread then
+			callback.parent_thread.callbacks[callback]=nil
+		end
+		eztask.callbacks[callback]=nil
 	end
+	_signal.callbacks={}
 end
 
 ------------------------------[Property Class]------------------------------
@@ -185,11 +188,8 @@ end
 function thread.import(_thread,path,name)
 	assert(path~=nil,"Cannot import from nil")
 	if name==nil then
-		if type(path)=="string" then
-			name=path:sub((path:match("^.*()/") or 0)+1,#path)
-		else
-			error(("Cannot import %s without a name"):format(path))
-		end
+		assert(type(path)=="string",("Cannot import %s without a name"):format(path))
+		name=path:sub((path:match("^.*()/") or 0)+1,#path)
 	else
 		name=tostring(name)
 	end
@@ -213,7 +213,6 @@ function thread.sleep(_thread,d)
 		current_thread.resume_tick=current_thread.tick+(d or 0)
 	elseif type(d)=="table" and (getmetatable(d)==signal or getmetatable(d)==property) then
 		local bind
-		current_thread.resume_tick=nil
 		bind=d:attach(function()
 			bind:detach()
 			current_thread.resume_tick=current_thread.tick
