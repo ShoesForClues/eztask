@@ -32,20 +32,24 @@ local running   = coroutine.running
 local traceback = debug.traceback
 
 local eztask={
-	_version  = {2,1,6};
-	imports   = {};
-	threads   = {};
-	callbacks = {};
+	_version  = {2,1,8},
+	imports   = {},
+	threads   = {},
+	callbacks = {}
 }
 
 eztask.imports.eztask=eztask --wtf
 eztask._scope=setmetatable({},{
 	__index=function(_,k)
 		local _coroutine=running()
-		if k=="_thread" then
-			return eztask.threads[_coroutine]
+		if _coroutine then
+			if k=="_thread" then
+				return eztask.threads[_coroutine]
+			end
+			return eztask.threads[_coroutine][k] or eztask.threads[_coroutine].imports[k]
+		else
+			return eztask[k] or eztask.imports[k]
 		end
-		return eztask.threads[_coroutine][k] or eztask.threads[_coroutine].imports[k]
 	end
 })
 
@@ -54,9 +58,35 @@ eztask.require = require
 eztask.tick    = os.clock
 
 --Class Types
-local thread   = {}
 local signal   = {}
 local property = {}
+local thread   = {}
+
+function eztask.import(_parent,source,name)
+	assert(source~=nil,"Cannot import from nil")
+	if name==nil then
+		assert(type(source)=="string",("Cannot import %s without a name"):format(source))
+		name=source:sub((source:match("^.*()/") or 0)+1,#source)
+	else
+		name=tostring(name)
+	end
+	if _parent.imports[name] then
+		print("[WARNING]: %s is already imported!"):format(name)
+	end
+	if type(source)=="string" then
+		source=eztask.require(source)
+	end
+	if type(source)=="function" then
+		source=source(eztask._scope)
+	end
+	_parent.imports[name]=source
+	return source
+end
+
+function eztask.depend(_parent,name)
+	assert(_parent.imports[name]~=nil,"Missing dependency: "..name)
+	return _parent.imports[name]
+end
 
 ------------------------------[Signal Class]------------------------------
 signal.__index=signal
@@ -134,6 +164,10 @@ end
 
 ------------------------------[Thread Class]------------------------------
 thread.__index=thread
+
+thread.import = eztask.import
+thread.depend = eztask.depend
+
 thread.__call=function(_thread,...)
 	if _thread.coroutine~=nil then
 		_thread:kill()
@@ -181,27 +215,6 @@ function thread.new(env,parent_thread)
 	end,true)
 	
 	return setmetatable(_thread,thread)
-end
-
-function thread.import(_thread,path,name)
-	assert(path~=nil,"Cannot import from nil")
-	if name==nil then
-		assert(type(path)=="string",("Cannot import %s without a name"):format(path))
-		name=path:sub((path:match("^.*()/") or 0)+1,#path)
-	else
-		name=tostring(name)
-	end
-	local source=eztask.require(path)
-	if type(source)=="function" then
-		source=source(eztask._scope)
-	end
-	_thread.imports[name]=source
-	return source
-end
-
-function thread.depend(_thread,name)
-	assert(_thread.imports[name]~=nil,"Missing dependency: "..name)
-	return _thread.imports[name]
 end
 
 function thread.sleep(_thread,d)
