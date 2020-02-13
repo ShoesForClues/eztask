@@ -5,8 +5,11 @@ This library will work with any platform that uses Lua and abides with foreign a
 
 # Example Usage
 ```lua
+local signal_a=eztask.signal.new()
+
 local thread_a=eztask.thread.new(function(thread)
   while thread:sleep(1) do
+    signal_a:invoke()
     print("Apples")
   end
 end)
@@ -17,8 +20,14 @@ local thread_b=eztask.thread.new(function(thread)
   end
 end)
 
+local thread_c=eztask.thread.new(function(thread)
+  thread:sleep(signal_a)
+  print("Grapes") --Prints before Apples
+end)
+
 thread_a()
 thread_b()
+thread_c()
 ```
 
 # How to use in LÖVE
@@ -62,7 +71,7 @@ end)("hi")
 
 # Creating a library
 ```lua
-return function(thread) --You will need to sandbox the library if you wish to have access to the thread scope
+return function(thread) --You will need to sandbox the library if you wish to have access to the thread or returning another function
   thread:depend "somedependency"
   thread:depend "someotherdependency"
 
