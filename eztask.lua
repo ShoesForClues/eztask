@@ -32,10 +32,10 @@ local running   = coroutine.running
 local traceback = debug.traceback
 
 local eztask={
-	_version  = {2,1,8},
-	imports   = {},
-	threads   = {},
-	callbacks = {}
+	_version  = {2,1,8};
+	imports   = {};
+	threads   = {};
+	callbacks = {};
 }
 
 eztask.imports.eztask=eztask --wtf
@@ -70,14 +70,15 @@ function eztask.import(_parent,source,name)
 	else
 		name=tostring(name)
 	end
-	if _parent.imports[name] then
-		print("[WARNING]: %s is already imported!"):format(name)
-	end
-	if type(source)=="string" then
-		source=eztask.require(source)
+	local success,ret=pcall(eztask.require,source)
+	if success then
+		source=ret
 	end
 	if type(source)=="function" then
 		source=source(eztask._scope)
+	end
+	if _parent.imports[name] then
+		print(("[WARNING]: %s is already imported!"):format(name))
 	end
 	_parent.imports[name]=source
 	return source
