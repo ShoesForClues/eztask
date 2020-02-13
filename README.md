@@ -44,8 +44,8 @@ eztask.thread.new(function(thread,arg1)
   
   --[[
   NOTE: Any child threads or callback attachments made within a thread will prevent the thread from being 
-  automatically deleted once the coroutine is killed. However, calling the kill() method will force 
-  all child threads to be deleted and will detach all callbacks.
+  automatically deleted once the coroutine is killed. However, calling the kill() method will force all 
+  child threads to be deleted and will detach all callbacks.
   
   If you wish to have the thread terminate itself, you can do thread._thread:kill()
   ]]
@@ -54,7 +54,12 @@ end)("hi")
 
 # Creating a library
 ```lua
-return function(thread) --You will need to sandbox the library if you wish to have access to the thread or returning another function
+--[[
+NOTE: You will need to sandbox the library if you wish to have access to the thread or if you are
+returning another function.
+]]
+
+return function(thread)
   local somedependency      = thread:depend "somedependency"
   local someotherdependency = thread:depend "someotherdependency"
 
