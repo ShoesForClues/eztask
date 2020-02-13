@@ -26,7 +26,7 @@ eztask.thread.new(function(thread,arg1)
     lib.dosomething()
   end,true) --To disconnect the callback do render_callback:detach()
   
-  --You can also do it this way, which may be better than the method above.
+  --You can also do it this way, which may or may not be better than the method above.
   local render_loop=thread.new(function()
     while thread:sleep(render) do
       lib.dosomething()
