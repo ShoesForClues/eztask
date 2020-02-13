@@ -3,40 +3,12 @@ A task scheduler written in Lua
 
 This library will work with any platform that uses Lua and abides with foreign asynchronous calls.
 
-# Example Usage
-```lua
-local signal_a=eztask.signal.new()
-
-local thread_a=eztask.thread.new(function(thread)
-  while thread:sleep(1) do
-    signal_a:invoke()
-    print("Apples")
-  end
-end)
-
-local thread_b=eztask.thread.new(function(thread)
-  while thread:sleep(0.5) do
-    print("Oranges")
-  end
-end)
-
-local thread_c=eztask.thread.new(function(thread)
-  while thread:sleep(signal_a) do
-    print("Grapes") --Prints before Apples
-  end
-end)
-
-thread_a()
-thread_b()
-thread_c()
-```
-
 # How to use in LÖVE
 ```lua
 local eztask=require "eztask"
 eztask.tick=love.timer.getTime
 
---Bind native callback
+--Bind events
 local render=eztask.signal.new()
 
 function love.update(dt) eztask:step(dt) end
@@ -47,12 +19,20 @@ eztask.thread.new(function(thread,arg1)
   
   --[[
   NOTE: Invoking the signal will create a new thread each time which may add overhead. If you do not wish 
-  to create a thread, pass a boolean as a second argument when attaching to the signal.
+  to create a new thread each time, pass a boolean as a second argument when attaching to the signal. You 
+  can also have a single thread yield on the signal in a loop.
   ]]
   
   local render_callback=render:attach(function()
     lib.dosomething()
   end,true) --To disconnect the callback do render_callback:detach()
+  
+  --You can also do it this way, which may be better than the method above.
+  local render_loop=thread.new(function()
+    while thread:sleep(render) do
+      lib.dosomething()
+    end
+  end)() --To kill the thread do render_loop:kill()
   
   --Creating a nested thread
   thread.new(function() --You do not need to redefine thread again
