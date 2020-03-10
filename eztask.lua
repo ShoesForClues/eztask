@@ -1,7 +1,7 @@
 --[[
-EZTask written by ShoesForClues Copyright (c) 2020
-
 MIT License
+
+Copyright (c) 2020 ShoesForClues
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -32,7 +32,7 @@ local running   = coroutine.running
 local traceback = debug.traceback
 
 local eztask={
-	_version  = {2,1,8};
+	_version  = {2,1,9};
 	imports   = {};
 	threads   = {};
 	callbacks = {};
@@ -79,6 +79,9 @@ function eztask.import(_parent,source,name)
 	end
 	if _parent.imports[name] then
 		print(("[WARNING]: %s is already imported!"):format(name))
+	end
+	if not success and (not source or type(source)=="string") then
+		print("[ERROR]: "..tostring(ret))
 	end
 	_parent.imports[name]=source
 	return source
@@ -151,11 +154,14 @@ property.__index=function(_property,k)
 	return signal[k]
 end
 property.__newindex=function(_property,k,v)
-	assert(k=="value",("Cannot assign %s to property"):format(k))
-	local old=rawget(_property,"_value")
-	if v~=old then
-		rawset(_property,"_value",v)
-		_property:invoke(v,old)
+	if k=="value" then
+		local old=rawget(_property,"_value")
+		if v~=old then
+			rawset(_property,"_value",v)
+			_property:invoke(v,old)
+		end
+	else
+		rawset(_property,k,v)
 	end
 end
 
