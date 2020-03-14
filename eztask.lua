@@ -32,11 +32,20 @@ local running   = coroutine.running
 local traceback = debug.traceback
 
 local eztask={
-	_version  = {2,1,9};
-	imports   = {};
-	threads   = {};
-	callbacks = {};
+	_version  = {2,1,9},
+	imports   = {},
+	threads   = {},
+	callbacks = {}
 }
+
+--Wrapped
+eztask.require = require
+eztask.tick    = os.clock
+
+--Object Types
+local signal   = {}
+local property = {}
+local thread   = {}
 
 eztask.imports.eztask=eztask --wtf
 eztask._scope=setmetatable({},{
@@ -52,15 +61,6 @@ eztask._scope=setmetatable({},{
 		end
 	end
 })
-
---Wrapped
-eztask.require = require
-eztask.tick    = os.clock
-
---Class Types
-local signal   = {}
-local property = {}
-local thread   = {}
 
 function eztask.import(_parent,source,name)
 	assert(source~=nil,"Cannot import from nil")
@@ -92,7 +92,7 @@ function eztask.depend(_parent,name)
 	return _parent.imports[name]
 end
 
-------------------------------[Signal Class]------------------------------
+------------------------------[Signal]------------------------------
 signal.__index=signal
 
 function signal.new()
@@ -146,7 +146,7 @@ function signal.detach(_signal)
 	_signal.callbacks={}
 end
 
-------------------------------[Property Class]------------------------------
+------------------------------[Property]------------------------------
 property.__index=function(_property,k)
 	if k=="value" then
 		return rawget(_property,"_value")
@@ -169,7 +169,7 @@ function property.new(value)
 	return setmetatable({callbacks={},_value=value},property)
 end
 
-------------------------------[Thread Class]------------------------------
+------------------------------[Thread]------------------------------
 thread.__index=thread
 
 thread.import = eztask.import
@@ -195,17 +195,17 @@ function thread.new(env,parent_thread)
 	assert(type(env)=="function","Cannot create thread with invalid environment")
 	
 	local _thread={
-		running       = property.new(false);
-		killed        = property.new(false);
-		resume_state  = false;
-		tick          = 0;
-		resume_tick   = 0;
-		usage         = 0;
-		parent_thread = parent_thread or eztask.threads[running()] or eztask;
-		env           = env;
-		threads       = {};
-		callbacks     = {};
-		imports       = {};
+		running       = property.new(false),
+		killed        = property.new(false),
+		resume_state  = false,
+		tick          = 0,
+		resume_tick   = 0,
+		usage         = 0,
+		parent_thread = parent_thread or eztask.threads[running()] or eztask,
+		env           = env,
+		threads       = {},
+		callbacks     = {},
+		imports       = {}
 	}
 	
 	_thread.running:attach(function(state)
