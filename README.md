@@ -16,14 +16,14 @@ end
 
 # Creating threads
 ```lua
-eztask.thread.new(function(thread)
+local ThreadA=eztask.thread.new(function(thread)
   while true do
     print("Apples")
     thread:sleep(1)
   end
 end)()
 
-eztask.thread.new(function(thread)
+local ThreadB=eztask.thread.new(function(thread)
   while true do
     print("Oranges")
     thread:sleep(1)
@@ -38,6 +38,8 @@ eztask.thread.new(function(thread)
   end)()
 end)()
 ```
+To kill a thread, call the kill() method. Ex: ThreadA:kill()
+You can also kill it within the thread itself. Ex: ``thread._thread:kill()``
 
 # Creating signals
 ```lua
