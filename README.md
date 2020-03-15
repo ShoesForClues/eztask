@@ -21,7 +21,7 @@ local ThreadA=eztask.thread.new(function(thread)
     print("Apples")
     thread:sleep(1)
   end
-end)()
+end)
 
 local ThreadB=eztask.thread.new(function(thread)
   while true do
@@ -36,7 +36,10 @@ local ThreadB=eztask.thread.new(function(thread)
       thread:sleep(1)
     end)
   end)()
-end)()
+end)
+
+ThreadA()
+ThreadB()
 ```
 To kill a thread, call the kill() method. Ex: ```ThreadA:kill()```
 
