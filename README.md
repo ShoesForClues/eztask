@@ -38,8 +38,8 @@ local ThreadB=eztask.thread.new(function(thread)
   end)()
 end)()
 ```
-To kill a thread, call the kill() method. Ex: ``ThreadA:kill()``
-You can also kill it within the thread itself. Ex: ``thread._thread:kill()``
+To kill a thread, call the kill() method. Ex: ```ThreadA:kill()```
+You can also kill it within the thread itself. Ex: ```thread._thread:kill()```
 
 # Creating signals
 ```lua
@@ -55,8 +55,8 @@ eztask.thread.new(function(thread)
   TestSignal:invoke("Goodbye World!")
 end)()
 ```
-To disconnect a signal, call the detach() method on the binding. Ex: ``OnEvent:detach()``
-To disconnect all signals, call the detach() method on the signal. Ex: ``TestSignal:detach()``
+To disconnect a signal, call the detach() method on the binding. Ex: ```OnEvent:detach()```
+To disconnect all signals, call the detach() method on the signal. Ex: ```TestSignal:detach()```
 
 # Creating properties
 A property is derived from signal and invokes when the value has changed.
