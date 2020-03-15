@@ -44,7 +44,7 @@ To disconnect a signal, call the detach() method on the binding. Ex: OnEvent:det
 To disconnect all signals, call the detach() method on the signal. Ex: TestSignal:detach()
 
 # Creating properties
-A property is derived from signal and simply invokes when the value is changed.
+A property is derived from signal and invokes when the value has changed.
 ```lua
 local TestProperty=eztask.property.new("Apple")
 
