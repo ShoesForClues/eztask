@@ -1,4 +1,4 @@
-# Eztask
+# eztask
 A task scheduler written in Lua
 
 This library will work with any platform that uses Lua and abides with foreign asynchronous calls.
