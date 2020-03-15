@@ -53,11 +53,8 @@ local OnEvent=TestSignal:attach(function(thread,...)
   print("Signal invoked!",...)
 end) --This creates a thread, pass a boolean as the second arg if you don't wish to.
 
-eztask.thread.new(function(thread)
-  TestSignal:invoke("Hello World!")
-  thread:sleep(1)
-  TestSignal:invoke("Goodbye World!")
-end)()
+TestSignal:invoke("Hello World!")
+TestSignal:invoke("Goodbye World!")
 ```
 To disconnect a signal, call the detach() method on the binding. Ex: ```OnEvent:detach()```
 
