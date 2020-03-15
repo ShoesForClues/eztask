@@ -30,7 +30,7 @@ end)()
 ```lua
 local TestSignal=eztask.signal.new()
 
-local OnEvent=TestSignal:attach(function(...)
+local OnEvent=TestSignal:attach(function(thread,...)
   print("Signal invoked!",...)
 end) --This creates a thread, pass a boolean as the second arg if you don't wish to.
 
@@ -48,7 +48,7 @@ A property is derived from signal and invokes when the value has changed.
 ```lua
 local TestProperty=eztask.property.new("Apple")
 
-local OnChanged=TestProperty:attach(function(new,old)
+local OnChanged=TestProperty:attach(function(thread,new,old)
   print("Property changed!",new,old)
 end)
 
