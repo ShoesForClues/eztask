@@ -3,14 +3,19 @@ A task scheduler written in Lua
 
 This library will work with any platform that uses Lua and abides with foreign asynchronous calls.
 
-# How to use in LÖVE
+# Setting it up in LÖVE
 ```lua
 local eztask=require "eztask"
+
+eztask.tick=love.timer.getTime
 
 function love.update(dt)
   eztask:step(dt)
 end
+```
 
+# Creating threads
+```lua
 eztask.thread.new(function(thread)
   while true do
     print("Apples")
@@ -23,6 +28,14 @@ eztask.thread.new(function(thread)
     print("Oranges")
     thread:sleep(1)
   end
+  
+  --Create a nested thread.
+  thread.new(function() --You do not need to redefine thread
+    while true do
+      print("Grapes")
+      thread:sleep(1)
+    end)
+  end)()
 end)()
 ```
 
