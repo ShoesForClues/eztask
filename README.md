@@ -28,14 +28,6 @@ local ThreadB=eztask.thread.new(function(thread)
     print("Oranges")
     thread:sleep(1)
   end
-  
-  --Create a nested thread.
-  thread.new(function() --You do not need to redefine thread
-    while true do
-      print("Grapes")
-      thread:sleep(1)
-    end)
-  end)()
 end)
 
 ThreadA()
