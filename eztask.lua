@@ -32,7 +32,7 @@ local running   = coroutine.running
 local traceback = debug.traceback
 
 local eztask={
-	_version  = {2,1,9},
+	_version  = {2,2,0},
 	imports   = {},
 	threads   = {},
 	callbacks = {}
@@ -48,6 +48,7 @@ local property = {}
 local thread   = {}
 
 eztask.imports.eztask=eztask --wtf
+
 eztask._scope=setmetatable({},{
 	__index=function(_,k)
 		local _coroutine=running()
@@ -126,12 +127,9 @@ end
 function signal.invoke(_signal,...)
 	for _,callback in pairs(_signal.callbacks) do
 		if callback.parent_thread then
-			local args={...}
-			thread.new(function()
-				callback.call(unpack(args))
-			end,callback.parent_thread)()
+			thread.new(callback.call,callback.parent_thread)(...)
 		else
-			callback.call(...)
+			callback.call(eztask._scope,...)
 		end
 	end
 end
