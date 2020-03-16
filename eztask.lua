@@ -32,7 +32,7 @@ local running   = coroutine.running
 local traceback = debug.traceback
 
 local eztask={
-	_version  = {2,2,0},
+	_version  = {2,2,1},
 	imports   = {},
 	threads   = {},
 	callbacks = {}
@@ -51,12 +51,12 @@ eztask.imports.eztask=eztask --wtf
 
 eztask._scope=setmetatable({},{
 	__index=function(_,k)
-		local _coroutine=running()
-		if _coroutine then
+		local _thread=eztask.threads[running()]
+		if _thread then
 			if k=="_thread" then
-				return eztask.threads[_coroutine]
+				return _thread
 			end
-			return eztask.threads[_coroutine][k] or eztask.threads[_coroutine].imports[k]
+			return _thread[k] or _thread.imports[k]
 		else
 			return eztask[k] or eztask.imports[k]
 		end
@@ -189,7 +189,9 @@ thread.__call=function(_thread,...)
 end
 
 function thread.new(env,parent_thread)
-	if type(env)~="function" then env=eztask.require(env) or env end
+	if type(env)~="function" then
+		env=select(2,pcall(eztask.require,env))
+	end
 	assert(type(env)=="function","Cannot create thread with invalid environment")
 	
 	local _thread={
@@ -206,7 +208,7 @@ function thread.new(env,parent_thread)
 		imports       = {}
 	}
 	
-	_thread.running:attach(function(state)
+	_thread.running:attach(function(_,state)
 		if state==true then
 			for _,sub_thread in pairs(_thread.threads) do
 				sub_thread.running.value=sub_thread.resume_state
