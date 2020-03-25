@@ -45,7 +45,7 @@ local signal   = {}
 local property = {}
 local thread   = {}
 
-eztask._scope=setmetatable({},{
+eztask.__thread__=setmetatable({},{
 	__index=function(_,k)
 		local _thread=eztask.threads[running()]
 		if _thread then
@@ -95,7 +95,7 @@ function signal.invoke(_signal,...)
 		if callback.parent then
 			thread.new(callback.call,callback.parent)(...)
 		else
-			callback.call(eztask._scope,...)
+			callback.call(eztask.__thread__,...)
 		end
 	end
 end
@@ -151,7 +151,7 @@ thread.__call=function(_thread,...)
 end
 
 function thread.new(env,parent)
-	assert(type(env)=="function","Cannot create thread with invalid environment")
+	assert(type(env)=="function",("Cannot create thread with %s"):format(type(env)))
 	
 	local _thread={
 		running      = property.new(false),
@@ -216,7 +216,7 @@ function thread.resume(_thread,dt,...)
 		if status(_thread.coroutine)=="suspended" then
 			if _thread.resume_tick and _thread.resume_tick<=_thread.tick then
 				_thread.resume_tick=nil
-				local success,err=resume(_thread.coroutine,eztask._scope,...)
+				local success,err=resume(_thread.coroutine,eztask.__thread__,...)
 				if not success then
 					print("[ERROR]: "..traceback(_thread.coroutine,err))
 				end
