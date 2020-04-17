@@ -22,17 +22,24 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ]]
 
-local remove    = table.remove
-local unpack    = unpack or table.unpack
-local create    = coroutine.create
-local resume    = coroutine.resume
-local yield     = coroutine.yield
-local status    = coroutine.status
-local running   = coroutine.running
+local min = math.min
+local max = math.max
+
+local format = string.format
+
+local remove = table.remove
+local unpack = table.unpack or unpack
+
+local create  = coroutine.create
+local resume  = coroutine.resume
+local yield   = coroutine.yield
+local status  = coroutine.status
+local running = coroutine.running
+
 local traceback = debug.traceback
 
 local eztask={
-	_version  = {2,4,1},
+	_version  = {2,4,2},
 	threads   = {},
 	callbacks = {}
 }
@@ -67,10 +74,15 @@ function signal.new()
 end
 
 function signal.attach(_signal,call,no_thread)
-	assert(type(call)=="function",("Cannot attach %s to callback."):format(type(call)))
+	assert(
+		type(call)=="function",
+		format("Cannot attach %s to callback.",type(call))
+	)
+	
 	local callback={index=#_signal.callbacks+1,call=call}
+	
 	function callback:detach()
-		for i=callback.index,1,-1 do
+		for i=min(callback.index,#_signal.callbacks),1,-1 do
 			if _signal.callbacks[i]==callback then
 				remove(_signal.callbacks,i);break
 			end
@@ -80,13 +92,16 @@ function signal.attach(_signal,call,no_thread)
 		end
 		eztask.callbacks[callback]=nil
 	end
-	_signal.callbacks[callback.index]=callback
+	
 	if not no_thread then
 		local current_thread=eztask.threads[running()] or eztask
 		callback.parent=current_thread
 		current_thread.callbacks[callback]=callback
 	end
+	
+	_signal.callbacks[callback.index]=callback
 	eztask.callbacks[callback]=callback
+	
 	return callback
 end
 
@@ -140,18 +155,25 @@ thread.__call=function(_thread,...)
 	if _thread.coroutine~=nil then
 		_thread:kill()
 	end
+	
 	_thread.killed.value=false
 	_thread.running.value=true
 	_thread.resume_state=true
+	
 	_thread.coroutine=create(_thread.env)
 	_thread.parent.threads[_thread.coroutine]=_thread
 	eztask.threads[_thread.coroutine]=_thread
+	
 	_thread:resume(0,...)
+	
 	return _thread
 end
 
 function thread.new(env,parent)
-	assert(type(env)=="function",("Cannot create thread with %s"):format(type(env)))
+	assert(
+		type(env)=="function",
+		("Cannot create thread with %s"):format(type(env))
+	)
 	
 	local _thread={
 		running      = property.new(false),
@@ -186,7 +208,12 @@ function thread.sleep(_,d)
 	local real_tick=eztask.tick()
 	local d_type=type(d)
 	local _thread=eztask.threads[running()]
-	assert(_thread,"No thread to yield.")
+	
+	assert(
+		_thread,
+		"No thread to yield."
+	)
+	
 	if d==nil or d_type=="number" then
 		_thread.resume_tick=_thread.tick+(d or 0)
 	elseif d_type=="table" and (getmetatable(d)==signal or getmetatable(d)==property) then
@@ -199,7 +226,9 @@ function thread.sleep(_,d)
 	else
 		error("Cannot yield thread with "..d_type)
 	end
+	
 	yield()
+	
 	return eztask.tick()-real_tick
 end
 
@@ -209,34 +238,40 @@ function thread.resume(_thread,dt,...)
 			return _thread:kill()
 		end
 	end
+	
 	if _thread.running.value==true then
 		dt=dt or 0
 		local real_tick=eztask.tick()
 		_thread.tick=_thread.tick+dt
+		
 		if status(_thread.coroutine)=="suspended" then
 			if _thread.resume_tick and _thread.resume_tick<=_thread.tick then
 				_thread.resume_tick=nil
 				local success,err=resume(_thread.coroutine,eztask.__thread__,...)
 				if not success then
-					print("[ERROR]: "..traceback(_thread.coroutine,err))
+					print(traceback(_thread.coroutine,err))
 				end
 			end
 		end
+		
 		for _,child in pairs(_thread.threads) do
 			child:resume(dt)
 		end
+		
 		_thread.usage=(eztask.tick()-real_tick)/dt
 	end
 end
 
 function thread.kill(_thread)
 	_thread.running.value=false
+	
 	for _,child_thread in pairs(_thread.threads) do
 		child_thread:kill()
 	end
 	for _,callback in pairs(_thread.callbacks) do
 		callback:detach()
 	end
+	
 	_thread.parent.threads[_thread.coroutine]=nil
 	eztask.threads[_thread.coroutine]=nil
 	_thread.coroutine=nil
