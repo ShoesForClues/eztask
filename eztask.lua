@@ -87,7 +87,7 @@ function signal.attach(_signal,call,no_thread)
 				remove(_signal.callbacks,i);break
 			end
 		end
-		if callback.parent~=nil then
+		if callback.parent then
 			callback.parent.callbacks[callback]=nil
 		end
 		eztask.callbacks[callback]=nil
@@ -116,7 +116,7 @@ function signal.invoke(_signal,...)
 end
 
 function signal.detach(_signal)
-	for _,callback in pairs(_signal.callbacks) do
+	for i,callback in pairs(_signal.callbacks) do
 		if callback.parent then
 			callback.parent.callbacks[callback]=nil
 		end
