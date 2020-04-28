@@ -39,7 +39,7 @@ local running = coroutine.running
 local traceback = debug.traceback
 
 local eztask={
-	_version  = {2,4,2},
+	_version  = {2,4,3},
 	threads   = {},
 	callbacks = {}
 }
@@ -47,7 +47,8 @@ local eztask={
 --Wrapped
 eztask.tick = os.clock
 
---Object Types
+--Classes
+local callback = {}
 local signal   = {}
 local property = {}
 local thread   = {}
@@ -66,53 +67,53 @@ eztask.__thread__=setmetatable({},{
 	end
 })
 
+------------------------------[Callback]------------------------------
+callback.__index=callback
+
+callback.__call=function(_callback,...)
+	if _callback.async then
+		thread.new(_callback.call,_callback.parent)(...)
+	else
+		_callback.call(eztask.__thread__,...)
+	end
+end
+
+function callback.new(event,call,no_async)
+	local _callback={
+		event  = event,
+		call   = call,
+		parent = eztask.threads[running()] or eztask,
+		async  = not no_async
+	}
+	
+	event.callbacks[#event.callbacks+1]=_callback
+	_callback.parent.callbacks[_callback]=_callback
+	
+	return setmetatable(_callback,callback)
+end
+
+function callback.detach(_callback)
+	for i,bind in pairs(_callback.event.callbacks) do
+		if bind==_callback then
+			remove(_callback.event.callbacks,i);break
+		end
+	end
+	_callback.parent.callbacks[_callback]=nil
+end
+
 ------------------------------[Signal]------------------------------
 signal.__index=signal
 
+signal.__call=function(_signal,...)
+	for _,callback in pairs(_signal.callbacks) do
+		callback(...)
+	end
+end
+
+signal.attach=callback.new
+
 function signal.new()
 	return setmetatable({callbacks={}},signal)
-end
-
-function signal.attach(_signal,call,no_thread)
-	assert(
-		type(call)=="function",
-		format("Cannot attach %s to callback.",type(call))
-	)
-	
-	local callback={index=#_signal.callbacks+1,call=call}
-	
-	function callback:detach()
-		for i=min(callback.index,#_signal.callbacks),1,-1 do
-			if _signal.callbacks[i]==callback then
-				remove(_signal.callbacks,i);break
-			end
-		end
-		if callback.parent then
-			callback.parent.callbacks[callback]=nil
-		end
-		eztask.callbacks[callback]=nil
-	end
-	
-	if not no_thread then
-		local current_thread=eztask.threads[running()] or eztask
-		callback.parent=current_thread
-		current_thread.callbacks[callback]=callback
-	end
-	
-	_signal.callbacks[callback.index]=callback
-	eztask.callbacks[callback]=callback
-	
-	return callback
-end
-
-function signal.invoke(_signal,...)
-	for _,callback in pairs(_signal.callbacks) do
-		if callback.parent then
-			thread.new(callback.call,callback.parent)(...)
-		else
-			callback.call(eztask.__thread__,...)
-		end
-	end
 end
 
 function signal.detach(_signal)
@@ -132,17 +133,22 @@ property.__index=function(_property,k)
 	end
 	return signal[k]
 end
+
 property.__newindex=function(_property,k,v)
 	if k=="value" then
 		local old=rawget(_property,"_value")
 		if v~=old then
 			rawset(_property,"_value",v)
-			_property:invoke(v,old)
+			_property(v,old)
 		end
 	else
 		rawset(_property,k,v)
 	end
 end
+
+property.__call=signal.__call
+
+property.attach=callback.new
 
 function property.new(value)
 	return setmetatable({callbacks={},_value=value},property)
@@ -170,18 +176,13 @@ thread.__call=function(_thread,...)
 end
 
 function thread.new(env,parent)
-	assert(
-		type(env)=="function",
-		("Cannot create thread with %s"):format(type(env))
-	)
-	
 	local _thread={
 		running      = property.new(false),
 		killed       = property.new(false),
 		resume_state = false,
 		tick         = 0,
-		resume_tick  = 0,
 		usage        = 0,
+		resume_tick  = 0,
 		parent       = parent or eztask.threads[running()] or eztask,
 		env          = env,
 		threads      = {},
@@ -209,10 +210,7 @@ function thread.sleep(_,d)
 	local d_type=type(d)
 	local _thread=eztask.threads[running()]
 	
-	assert(
-		_thread,
-		"No thread to yield."
-	)
+	assert(_thread,"No thread to yield.")
 	
 	if d==nil or d_type=="number" then
 		_thread.resume_tick=_thread.tick+(d or 0)
