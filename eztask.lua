@@ -65,6 +65,14 @@ eztask.__thread__=setmetatable({},{
 	end
 })
 
+function eztask:step(dt)
+	for _,_thread in pairs(eztask.threads) do
+		if _thread.parent==eztask then
+			_thread:resume(dt)
+		end
+	end
+end
+
 ------------------------------[Callback]------------------------------
 callback.__index=callback
 
@@ -269,14 +277,7 @@ function thread.kill(_thread)
 	_thread.killed.value=true
 end
 
-function eztask:step(dt)
-	for _,_thread in pairs(eztask.threads) do
-		if _thread.parent==eztask then
-			_thread:resume(dt)
-		end
-	end
-end
-
+----------------------------------------------------------------------
 eztask.callback = callback
 eztask.signal   = signal
 eztask.property = property
