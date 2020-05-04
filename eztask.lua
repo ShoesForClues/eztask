@@ -25,8 +25,6 @@ SOFTWARE.
 local min = math.min
 local max = math.max
 
-local format = string.format
-
 local remove = table.remove
 local unpack = table.unpack or unpack
 
@@ -39,7 +37,7 @@ local running = coroutine.running
 local traceback = debug.traceback
 
 local eztask={
-	_version  = {2,4,3},
+	_version  = {2,4,4},
 	threads   = {},
 	callbacks = {}
 }
@@ -71,19 +69,14 @@ eztask.__thread__=setmetatable({},{
 callback.__index=callback
 
 callback.__call=function(_callback,...)
-	if _callback.async then
-		thread.new(_callback.call,_callback.parent)(...)
-	else
-		_callback.call(eztask.__thread__,...)
-	end
+	_callback.call(_callback,...)
 end
 
-function callback.new(event,call,no_async)
+function callback.new(event,call)
 	local _callback={
 		event  = event,
 		call   = call,
-		parent = eztask.threads[running()] or eztask,
-		async  = not no_async
+		parent = eztask.threads[running()] or eztask
 	}
 	
 	event.callbacks[#event.callbacks+1]=_callback
@@ -93,8 +86,8 @@ function callback.new(event,call,no_async)
 end
 
 function callback.detach(_callback)
-	for i,bind in pairs(_callback.event.callbacks) do
-		if bind==_callback then
+	for i=#_callback.event.callbacks,1,-1 do
+		if _callback.event.callbacks[i]==_callback then
 			remove(_callback.event.callbacks,i);break
 		end
 	end
@@ -117,11 +110,11 @@ function signal.new()
 end
 
 function signal.detach(_signal)
-	for i,callback in pairs(_signal.callbacks) do
-		if callback.parent then
-			callback.parent.callbacks[callback]=nil
+	for i,_callback in pairs(_signal.callbacks) do
+		if _callback.parent then
+			_callback.parent.callbacks[_callback]=nil
 		end
-		eztask.callbacks[callback]=nil
+		eztask.callbacks[_callback]=nil
 	end
 	_signal.callbacks={}
 end
@@ -210,8 +203,6 @@ function thread.sleep(_,d)
 	local d_type=type(d)
 	local _thread=eztask.threads[running()]
 	
-	assert(_thread,"No thread to yield.")
-	
 	if d==nil or d_type=="number" then
 		_thread.resume_tick=_thread.tick+(d or 0)
 	elseif d_type=="table" and (getmetatable(d)==signal or getmetatable(d)==property) then
@@ -236,28 +227,30 @@ function thread.resume(_thread,dt,...)
 			return _thread:kill()
 		end
 	end
+	if not _thread.running.value then
+		return
+	end
 	
-	if _thread.running.value==true then
-		dt=dt or 0
-		local real_tick=eztask.tick()
-		_thread.tick=_thread.tick+dt
-		
-		if status(_thread.coroutine)=="suspended" then
-			if _thread.resume_tick and _thread.resume_tick<=_thread.tick then
-				_thread.resume_tick=nil
-				local success,err=resume(_thread.coroutine,eztask.__thread__,...)
-				if not success then
-					print(traceback(_thread.coroutine,err))
-				end
+	local real_tick=eztask.tick()
+	
+	dt=dt or 0
+	_thread.tick=_thread.tick+dt
+	
+	if status(_thread.coroutine)=="suspended" then
+		if _thread.resume_tick and _thread.resume_tick<=_thread.tick then
+			_thread.resume_tick=nil
+			local success,err=resume(_thread.coroutine,eztask.__thread__,...)
+			if not success then
+				print(traceback(_thread.coroutine,err))
 			end
 		end
-		
-		for _,child in pairs(_thread.threads) do
-			child:resume(dt)
-		end
-		
-		_thread.usage=(eztask.tick()-real_tick)/dt
 	end
+	
+	for _,child in pairs(_thread.threads) do
+		child:resume(dt)
+	end
+	
+	_thread.usage=(eztask.tick()-real_tick)/dt
 end
 
 function thread.kill(_thread)
@@ -284,6 +277,7 @@ function eztask:step(dt)
 	end
 end
 
+eztask.callback = callback
 eztask.signal   = signal
 eztask.property = property
 eztask.thread   = thread
