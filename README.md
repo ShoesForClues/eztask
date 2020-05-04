@@ -41,7 +41,7 @@ You can also kill it within the thread itself. Ex: ```thread._thread:kill()```
 ```lua
 local TestSignal=eztask.signal.new()
 
-local OnEvent=TestSignal:attach(function(thread,...)
+local OnEvent=TestSignal:attach(function(callback,...)
   print("Signal invoked!",...)
 end) --This creates a thread, pass a boolean as the second arg if you don't wish to.
 
@@ -52,12 +52,14 @@ To disconnect a signal, call the detach() method on the binding. Ex: ```OnEvent:
 
 To disconnect all signals, call the detach() method on the signal. Ex: ```TestSignal:detach()```
 
+You can also detach the callback within. Ex: ```callback:detach()```
+
 # Creating properties
 A property is derived from signal and invokes when the value has changed.
 ```lua
 local TestProperty=eztask.property.new("Apple")
 
-local OnChanged=TestProperty:attach(function(thread,new,old)
+local OnChanged=TestProperty:attach(function(callback,new,old)
   print("Property changed!",new,old)
 end)
 
