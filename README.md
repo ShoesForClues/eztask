@@ -48,9 +48,9 @@ end) --This creates a thread, pass a boolean as the second arg if you don't wish
 TestSignal("Hello World!")
 TestSignal("Goodbye World!")
 ```
-To disconnect a signal, call the detach() method on the binding. Ex: ```OnEvent:detach()```
+To detach a signal, call the detach() method on the binding. Ex: ```OnEvent:detach()```
 
-To disconnect all signals, call the detach() method on the signal. Ex: ```TestSignal:detach()```
+To detach all signals, call the detach() method on the signal. Ex: ```TestSignal:detach()```
 
 You can also detach the callback within. Ex: ```callback:detach()```
 
@@ -65,4 +65,4 @@ end)
 
 TestProperty.value="Orange"
 ```
-Disconnecting a property is the same as a signal.
+Detaching a property is the same as a signal.
