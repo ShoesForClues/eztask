@@ -43,7 +43,7 @@ local TestSignal=eztask.signal.new()
 
 local OnEvent=TestSignal:attach(function(callback,...)
   print("Signal invoked!",...)
-end) --This creates a thread, pass a boolean as the second arg if you don't wish to.
+end)
 
 TestSignal("Hello World!")
 TestSignal("Goodbye World!")
