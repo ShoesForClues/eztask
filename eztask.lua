@@ -37,15 +37,12 @@ local running = coroutine.running
 local traceback = debug.traceback
 
 local eztask={
-	_version  = {2,4,4},
+	_version  = {2,4,5},
 	threads   = {},
-	callbacks = {}
+	callbacks = {},
+	tick      = os.clock
 }
 
---Wrapped
-eztask.tick = os.clock
-
---Classes
 local callback = {}
 local signal   = {}
 local property = {}
@@ -53,15 +50,11 @@ local thread   = {}
 
 eztask.__thread__=setmetatable({},{
 	__index=function(_,k)
-		local _thread=eztask.threads[running()]
-		if _thread then
-			if k=="_thread" then
-				return _thread
-			end
-			return _thread[k]
-		else
-			return eztask[k]
+		local _thread=eztask.threads[running()] or eztask
+		if k=="_thread" then
+			return _thread
 		end
+		return _thread[k]
 	end
 })
 
@@ -84,7 +77,7 @@ function callback.new(event,call)
 	local _callback={
 		event  = event,
 		call   = call,
-		parent = eztask.threads[running()] or eztask
+		parent = eztask.__thread__._thread
 	}
 	
 	event.callbacks[#event.callbacks+1]=_callback
@@ -163,6 +156,8 @@ thread.__call=function(_thread,...)
 		_thread:kill()
 	end
 	
+	_thread.parent=eztask.__thread__._thread
+	
 	_thread.killed.value=false
 	_thread.running.value=true
 	_thread.resume_state=true
@@ -171,12 +166,12 @@ thread.__call=function(_thread,...)
 	_thread.parent.threads[_thread.coroutine]=_thread
 	eztask.threads[_thread.coroutine]=_thread
 	
-	_thread:resume(0,...)
+	_thread:resume(0,_thread,...)
 	
 	return _thread
 end
 
-function thread.new(env,parent)
+function thread.new(env)
 	local _thread={
 		running      = property.new(false),
 		killed       = property.new(false),
@@ -184,7 +179,7 @@ function thread.new(env,parent)
 		tick         = 0,
 		usage        = 0,
 		resume_tick  = 0,
-		parent       = parent or eztask.threads[running()] or eztask,
+		parent       = nil,
 		env          = env,
 		threads      = {},
 		callbacks    = {}
@@ -201,32 +196,28 @@ function thread.new(env,parent)
 				child.running.value=false
 			end
 		end
-	end,true)
+	end)
 	
 	return setmetatable(_thread,thread)
 end
 
 function thread.sleep(_,d)
-	local real_tick=eztask.tick()
 	local d_type=type(d)
-	local _thread=eztask.threads[running()]
+	local _thread=eztask.__thread__._thread
 	
 	if d==nil or d_type=="number" then
 		_thread.resume_tick=_thread.tick+(d or 0)
 	elseif d_type=="table" and (getmetatable(d)==signal or getmetatable(d)==property) then
-		local bind
-		bind=d:attach(function()
-			bind:detach()
+		d:attach(function(callback,...)
+			callback:detach()
 			_thread.resume_tick=_thread.tick
-			_thread:resume()
-		end,true)
+			_thread:resume(0,...)
+		end)
 	else
 		error("Cannot yield thread with "..d_type)
 	end
 	
-	yield()
-	
-	return eztask.tick()-real_tick
+	return yield()
 end
 
 function thread.resume(_thread,dt,...)
@@ -247,7 +238,7 @@ function thread.resume(_thread,dt,...)
 	if status(_thread.coroutine)=="suspended" then
 		if _thread.resume_tick and _thread.resume_tick<=_thread.tick then
 			_thread.resume_tick=nil
-			local success,err=resume(_thread.coroutine,eztask.__thread__,...)
+			local success,err=resume(_thread.coroutine,...)
 			if not success then
 				print(traceback(_thread.coroutine,err))
 			end
@@ -258,7 +249,7 @@ function thread.resume(_thread,dt,...)
 		child:resume(dt)
 	end
 	
-	_thread.usage=(eztask.tick()-real_tick)/dt
+	_thread.usage=eztask.tick()-real_tick
 end
 
 function thread.kill(_thread)
