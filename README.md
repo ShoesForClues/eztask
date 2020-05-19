@@ -35,7 +35,7 @@ ThreadB()
 ```
 To kill a thread, call the kill() method. Ex: ```ThreadA:kill()```
 
-You can also kill it within the thread itself. Ex: ```thread._thread:kill()```
+You can also kill it within the thread itself. Ex: ```thread:kill()```
 
 # Creating signals
 ```lua
