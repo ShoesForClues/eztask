@@ -48,9 +48,9 @@ end)
 TestSignal("Hello World!")
 TestSignal("Goodbye World!")
 ```
-To detach a signal, call the detach() method on the binding. Ex: ```OnEvent:detach()```
+To detach a callback, call the detach() method on the binding. Ex: ```OnEvent:detach()```
 
-To detach all signals, call the detach() method on the signal. Ex: ```TestSignal:detach()```
+To detach all callbacks, call the detach() method on the signal. Ex: ```TestSignal:detach()```
 
 You can also detach the callback within. Ex: ```callback:detach()```
 
