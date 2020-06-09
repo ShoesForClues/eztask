@@ -7,10 +7,10 @@ This library will work with any platform that uses Lua and abides with foreign a
 ```lua
 local eztask=require "eztask"
 
-eztask.tick=love.timer.getTime --This is optional
+eztask.tick=love.timer.getTime
 
-function love.update(dt)
-  eztask:step(dt)
+function love.update()
+  eztask.step()
 end
 ```
 
