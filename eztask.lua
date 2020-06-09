@@ -1,7 +1,7 @@
 --[[
 MIT License
 
-Copyright (c) 2020 ShoesForClues
+Copyright (c) 2020 Shoelee
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -22,24 +22,17 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ]]
 
-local min = math.min
-local max = math.max
-
-local remove = table.remove
-local unpack = table.unpack or unpack
-
-local create  = coroutine.create
-local resume  = coroutine.resume
-local yield   = coroutine.yield
-local status  = coroutine.status
-local running = coroutine.running
-
+local remove    = table.remove
+local create    = coroutine.create
+local resume    = coroutine.resume
+local yield     = coroutine.yield
+local status    = coroutine.status
+local running   = coroutine.running
 local traceback = debug.traceback
 
 local eztask={
-	_version  = {2,4,5},
+	_version  = {2,4,7},
 	threads   = {},
-	callbacks = {},
 	tick      = os.clock
 }
 
@@ -48,25 +41,19 @@ local signal   = {}
 local property = {}
 local thread   = {}
 
-eztask.__thread__=setmetatable({},{
-	__index=function(_,k)
-		local _thread=eztask.threads[running()] or eztask
-		if k=="_thread" then
-			return _thread
-		end
-		return _thread[k]
-	end
-})
+function eztask.running()
+	return eztask.threads[running()]
+end
 
-function eztask:step(dt)
+function eztask.step()
 	for _,_thread in pairs(eztask.threads) do
 		if _thread.parent==eztask then
-			_thread:resume(dt)
+			_thread:resume()
 		end
 	end
 end
 
-------------------------------[Callback]------------------------------
+--[Callback]
 callback.__index=callback
 
 callback.__call=function(_callback,...)
@@ -77,11 +64,14 @@ function callback.new(event,call)
 	local _callback={
 		event  = event,
 		call   = call,
-		parent = eztask.__thread__._thread
+		thread = eztask.threads[running()]
 	}
 	
 	event.callbacks[#event.callbacks+1]=_callback
-	_callback.parent.callbacks[_callback]=_callback
+	
+	if _callback.thread then
+		_callback.thread.callbacks[_callback]=_callback
+	end
 	
 	return setmetatable(_callback,callback)
 end
@@ -92,10 +82,12 @@ function callback.detach(_callback)
 			remove(_callback.event.callbacks,i);break
 		end
 	end
-	_callback.parent.callbacks[_callback]=nil
+	if _callback.thread then
+		_callback.thread.callbacks[_callback]=nil
+	end
 end
 
-------------------------------[Signal]------------------------------
+--[Signal]
 signal.__index=signal
 
 signal.__call=function(_signal,...)
@@ -112,15 +104,14 @@ end
 
 function signal.detach(_signal)
 	for i,_callback in pairs(_signal.callbacks) do
-		if _callback.parent then
-			_callback.parent.callbacks[_callback]=nil
+		if _callback.thread then
+			_callback.thread.callbacks[_callback]=nil
 		end
-		eztask.callbacks[_callback]=nil
 	end
 	_signal.callbacks={}
 end
 
-------------------------------[Property]------------------------------
+--[Property]
 property.__index=function(_property,k)
 	if k=="value" then
 		return rawget(_property,"_value")
@@ -148,45 +139,29 @@ function property.new(value)
 	return setmetatable({callbacks={},_value=value},property)
 end
 
-------------------------------[Thread]------------------------------
+--[Thread]
 thread.__index=thread
 
 thread.__call=function(_thread,...)
-	if _thread.coroutine~=nil then
+	if _thread.coroutine then
 		_thread:kill()
 	end
 	
-	_thread.parent=eztask.__thread__._thread
+	_thread.parent        = eztask.threads[running()] or eztask
+	_thread.killed.value  = false
+	_thread.running.value = true
+	_thread.start_tick    = eztask.tick()
+	_thread.stop_tick     = 0
+	_thread.tick          = 0
+	_thread.run_tick      = 0
+	_thread.coroutine     = create(_thread.env)
 	
-	_thread.killed.value=false
-	_thread.running.value=true
-	_thread.resume_state=true
-	
-	_thread.coroutine=create(_thread.env)
 	_thread.parent.threads[_thread.coroutine]=_thread
 	eztask.threads[_thread.coroutine]=_thread
 	
-	_thread:resume(0,_thread,...)
-	
-	return _thread
-end
-
-function thread.new(env)
-	local _thread={
-		running      = property.new(false),
-		killed       = property.new(false),
-		resume_state = false,
-		tick         = 0,
-		usage        = 0,
-		resume_tick  = 0,
-		parent       = nil,
-		env          = env,
-		threads      = {},
-		callbacks    = {}
-	}
-	
-	_thread.running:attach(function(_,state)
-		if state==true then
+	local _running=_thread.running:attach(function(_,state)
+		if state then
+			_thread.start_tick=_thread.start_tick+(eztask.tick()-_thread.stop_tick)
 			for _,child in pairs(_thread.threads) do
 				child.running.value=child.resume_state
 			end
@@ -195,61 +170,37 @@ function thread.new(env)
 				child.resume_state=child.running.value
 				child.running.value=false
 			end
+			_thread.stop_tick=eztask.tick()
 		end
 	end)
 	
-	return setmetatable(_thread,thread)
+	_thread.killed:attach(function(_callback,killed)
+		if killed then
+			_running:detach()
+			_callback:detach()
+		end
+	end)
+	
+	_thread:resume(_thread,...)
+	
+	return _thread
 end
 
-function thread.sleep(_,d)
-	local d_type=type(d)
-	local _thread=eztask.__thread__._thread
-	
-	if d==nil or d_type=="number" then
-		_thread.resume_tick=_thread.tick+(d or 0)
-	elseif d_type=="table" and (getmetatable(d)==signal or getmetatable(d)==property) then
-		d:attach(function(callback,...)
-			callback:detach()
-			_thread.resume_tick=_thread.tick
-			_thread:resume(0,...)
-		end)
-	else
-		error("Cannot yield thread with "..d_type)
-	end
-	
-	return yield()
-end
-
-function thread.resume(_thread,dt,...)
-	if status(_thread.coroutine)=="dead" then
-		if next(_thread.callbacks)==nil and next(_thread.threads)==nil then
-			return _thread:kill()
-		end
-	end
-	if not _thread.running.value then
-		return
-	end
-	
-	local real_tick=eztask.tick()
-	
-	dt=dt or 0
-	_thread.tick=_thread.tick+dt
-	
-	if status(_thread.coroutine)=="suspended" then
-		if _thread.resume_tick and _thread.resume_tick<=_thread.tick then
-			_thread.resume_tick=nil
-			local success,err=resume(_thread.coroutine,...)
-			if not success then
-				print(traceback(_thread.coroutine,err))
-			end
-		end
-	end
-	
-	for _,child in pairs(_thread.threads) do
-		child:resume(dt)
-	end
-	
-	_thread.usage=eztask.tick()-real_tick
+function thread.new(env)
+	return setmetatable({
+		running      = property.new(false),
+		killed       = property.new(false),
+		resume_state = false,
+		start_tick   = 0,
+		stop_tick    = 0,
+		run_tick     = 0,
+		tick         = 0,
+		usage        = 0,
+		parent       = nil,
+		env          = env,
+		threads      = {},
+		callbacks    = {}
+	},thread)
 end
 
 function thread.kill(_thread)
@@ -266,9 +217,60 @@ function thread.kill(_thread)
 	eztask.threads[_thread.coroutine]=nil
 	_thread.coroutine=nil
 	_thread.killed.value=true
+	
+	return _thread
 end
 
-----------------------------------------------------------------------
+function thread.resume(_thread,...)
+	if status(_thread.coroutine)=="dead" then
+		if next(_thread.callbacks)==nil and next(_thread.threads)==nil then
+			return _thread:kill()
+		end
+	end
+	if not _thread.running.value then
+		return
+	end
+	
+	local tick=eztask.tick()
+	
+	_thread.tick=tick-_thread.start_tick
+	
+	if status(_thread.coroutine)=="suspended" then
+		if _thread.run_tick and _thread.run_tick<=_thread.tick then
+			_thread.run_tick=nil
+			local success,ret=resume(_thread.coroutine,...)
+			if not success then
+				print(traceback(_thread.coroutine,ret))
+			end
+		end
+	end
+	
+	for _,child in pairs(_thread.threads) do
+		child:resume()
+	end
+	
+	_thread.usage=eztask.tick()-tick
+end
+
+function thread.sleep(_,t)
+	local _type=type(t)
+	local _thread=eztask.threads[running()]
+	
+	if t==nil or _type=="number" then
+		_thread.run_tick=_thread.tick+(t or 0)
+	elseif _type=="table" and (getmetatable(t)==signal or getmetatable(t)==property) then
+		t:attach(function(_callback,...)
+			_callback:detach()
+			_thread.run_tick=_thread.tick
+			_thread:resume(...)
+		end)
+	else
+		error("Cannot yield thread with ".._type)
+	end
+	
+	return yield()
+end
+
 eztask.callback = callback
 eztask.signal   = signal
 eztask.property = property
