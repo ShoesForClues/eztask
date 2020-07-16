@@ -22,16 +22,20 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ]]
 
-local remove    = table.remove
-local create    = coroutine.create
-local resume    = coroutine.resume
-local yield     = coroutine.yield
-local status    = coroutine.status
-local running   = coroutine.running
-local traceback = debug.traceback
+local t_remove    = table.remove
+local t_clear     = table.clear       --LuaJIT 2.0.5
+
+local c_create    = coroutine.create
+local c_close     = coroutine.close   --Lua 5.4
+local c_resume    = coroutine.resume
+local c_yield     = coroutine.yield
+local c_status    = coroutine.status
+local c_running   = coroutine.running
+
+local d_traceback = debug.traceback
 
 local eztask={
-	_version = {2,4,8},
+	_version = {2,4,9},
 	threads  = {},
 	tick     = os.clock
 }
@@ -42,7 +46,7 @@ local property = {}
 local thread   = {}
 
 function eztask.running()
-	return eztask.threads[running()]
+	return eztask.threads[c_running()]
 end
 
 function eztask.step()
@@ -54,8 +58,6 @@ function eztask.step()
 end
 
 --Callback
-callback.__index=callback
-
 function callback.new(event,call,instance)
 	local callback_={
 		event    = event,
@@ -85,29 +87,26 @@ function callback.detach(callback_)
 end
 
 function callback.__call(callback_,...)
-	if callback_.instance then
-		callback_.call(callback_.instance,...)
-	else
-		callback_.call(callback_,...)
-	end
+	callback_.call(callback_.instance or callback_,...)
 end
 
+callback.__index=callback
+
 --Signal
-signal.__index=signal
-
-signal.attach=callback.new
-
 function signal.new()
 	return setmetatable({callbacks={}},signal)
 end
 
+signal.attach=callback.new
+
 function signal.detach(signal_)
-	for i,callback_ in ipairs(signal_.callbacks) do
+	for i=#signal_.callbacks,1,-1 do
+		local callback_=signal_.callbacks[i]
 		if callback_ and callback_.thread then
 			callback_.thread.callbacks[callback_]=nil
 		end
+		signal_.callbacks[i]=nil
 	end
-	signal_.callbacks={}
 end
 
 function signal.__call(signal_,...)
@@ -116,20 +115,26 @@ function signal.__call(signal_,...)
 	end
 	for i=#signal_.callbacks,1,-1 do
 		if not signal_.callbacks[i] then
-			remove(signal_.callbacks,i)
+			t_remove(signal_.callbacks,i)
 		end
 	end
 end
 
+signal.__index=signal
+
 --Property
-property.__index=function(property_,k)
+function property.new(value)
+	return setmetatable({callbacks={},_value=value},property)
+end
+
+function property.__index(property_,k)
 	if k=="value" then
 		return rawget(property_,"_value")
 	end
 	return signal[k]
 end
 
-property.__newindex=function(property_,k,v)
+function property.__newindex(property_,k,v)
 	if k=="value" then
 		local old=rawget(property_,"_value")
 		if v~=old then
@@ -145,13 +150,7 @@ property.__call=signal.__call
 
 property.attach=callback.new
 
-function property.new(value)
-	return setmetatable({callbacks={},_value=value},property)
-end
-
 --Thread
-thread.__index=thread
-
 function thread.new(env)
 	return setmetatable({
 		env          = env,
@@ -169,12 +168,12 @@ function thread.new(env)
 end
 
 function thread.__call(thread_,...)
-	if thread_.coroutine and status(thread_.coroutine)~="dead" then
+	if thread_.coroutine and c_status(thread_.coroutine)~="dead" then
 		thread_:kill()
 	end
 	
 	thread_.parent        = eztask.running() or eztask
-	thread_.coroutine     = create(thread_.env)
+	thread_.coroutine     = c_create(thread_.env)
 	thread_.killed.value  = false
 	thread_.running.value = true
 	thread_.start_tick    = thread_.parent:tick()
@@ -226,6 +225,9 @@ function thread.kill(thread_)
 	
 	thread_.parent.threads[thread_.coroutine]=nil
 	eztask.threads[thread_.coroutine]=nil
+	
+	if c_close then c_close(thread_.coroutine) end
+	
 	thread_.killed.value=true
 	
 	return thread_
@@ -242,16 +244,16 @@ function thread.resume(thread_,...)
 	
 	local resume_tick=thread_:tick()
 	
-	if status(thread_.coroutine)=="suspended" then
+	if c_status(thread_.coroutine)=="suspended" then
 		if thread_.run_tick and thread_.run_tick<=thread_:tick() then
 			thread_.run_tick=nil
-			local success,ret=resume(thread_.coroutine,...)
+			local success,ret=c_resume(thread_.coroutine,...)
 			if not success then
-				print(traceback(thread_.coroutine,ret))
+				print(d_traceback(thread_.coroutine,ret))
 			end
 		end
 	end
-	if status(thread_.coroutine)=="dead" then
+	if c_status(thread_.coroutine)=="dead" then
 		if not next(thread_.callbacks) and not next(thread_.threads) then
 			return thread_:kill()
 		end
@@ -279,8 +281,10 @@ function thread.sleep(_,t)
 		error("Invalid yield type: "..type(t))
 	end
 	
-	return yield()
+	return c_yield()
 end
+
+thread.__index=thread
 
 eztask.callback = callback
 eztask.signal   = signal
