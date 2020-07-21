@@ -35,9 +35,9 @@ local c_running   = coroutine.running
 local d_traceback = debug.traceback
 
 local eztask={
-	_version = {2,4,9},
-	threads  = {},
-	tick     = os.clock
+	version = {2,5,0},
+	threads = {},
+	tick    = os.clock
 }
 
 local callback = {}
@@ -156,11 +156,11 @@ function thread.new(env)
 		env          = env,
 		parent       = nil,
 		running      = property.new(false),
-		killed       = property.new(false),
+		active       = property.new(false),
 		resume_state = false,
 		start_tick   = 0,
 		stop_tick    = 0,
-		run_tick     = 0,
+		resume_tick  = 0,
 		usage        = 0,
 		threads      = {},
 		callbacks    = {}
@@ -174,11 +174,11 @@ function thread.__call(thread_,...)
 	
 	thread_.parent        = eztask.running() or eztask
 	thread_.coroutine     = c_create(thread_.env)
-	thread_.killed.value  = false
+	thread_.active.value  = true
 	thread_.running.value = true
 	thread_.start_tick    = thread_.parent:tick()
-	thread_.stop_tick     = thread_.parent:tick()
-	thread_.run_tick      = 0
+	thread_.stop_tick     = thread_.start_tick
+	thread_.resume_tick   = 0
 	
 	thread_.parent.threads[thread_.coroutine]=thread_
 	eztask.threads[thread_.coroutine]=thread_
@@ -201,8 +201,8 @@ function thread.__call(thread_,...)
 		end
 	end)
 	
-	thread_.killed:attach(function(callback_,killed)
-		if killed then
+	thread_.active:attach(function(callback_,active)
+		if not active then
 			running_:detach()
 			callback_:detach()
 		end
@@ -228,13 +228,15 @@ function thread.kill(thread_)
 	
 	if c_close then c_close(thread_.coroutine) end
 	
-	thread_.killed.value=true
+	thread_.active.value=false
 	
 	return thread_
 end
 
 function thread.tick(thread_)
-	return thread_.parent:tick()-thread_.start_tick
+	return
+		thread_.running.value and thread_.parent:tick()-thread_.start_tick
+		or thread_.stop_tick-thread_.start_tick --If thread is paused
 end
 
 function thread.resume(thread_,...)
@@ -245,8 +247,8 @@ function thread.resume(thread_,...)
 	local resume_tick=thread_:tick()
 	
 	if c_status(thread_.coroutine)=="suspended" then
-		if thread_.run_tick and thread_.run_tick<=thread_:tick() then
-			thread_.run_tick=nil
+		if thread_.resume_tick and thread_.resume_tick<=thread_:tick() then
+			thread_.resume_tick=nil
 			local success,ret=c_resume(thread_.coroutine,...)
 			if not success then
 				print(d_traceback(thread_.coroutine,ret))
@@ -270,11 +272,11 @@ function thread.sleep(_,t)
 	local thread_=eztask.running()
 	
 	if t==nil or type(t)=="number" then
-		thread_.run_tick=thread_:tick()+(t or 0)
+		thread_.resume_tick=thread_:tick()+(t or 0)
 	elseif getmetatable(t)==signal or getmetatable(t)==property then
 		t:attach(function(callback_,...)
 			callback_:detach()
-			thread_.run_tick=thread_:tick()
+			thread_.resume_tick=thread_:tick()
 			thread_:resume(...)
 		end)
 	else
