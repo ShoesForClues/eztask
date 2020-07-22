@@ -35,7 +35,7 @@ local c_running   = coroutine.running
 local d_traceback = debug.traceback
 
 local eztask={
-	version = {2,5,0},
+	version = {2,5,1},
 	threads = {},
 	tick    = os.clock
 }
@@ -87,7 +87,9 @@ function callback.detach(callback_)
 end
 
 function callback.__call(callback_,...)
-	callback_.call(callback_.instance or callback_,...)
+	return
+		(not callback_.thread or callback_.thread.running.value)
+		and callback_.call(callback_.instance or callback_,...)
 end
 
 callback.__index=callback
@@ -156,7 +158,7 @@ function thread.new(env)
 		env          = env,
 		parent       = nil,
 		running      = property.new(false),
-		active       = property.new(false),
+		active       = property.new(false), --Read only
 		resume_state = false,
 		start_tick   = 0,
 		stop_tick    = 0,
@@ -198,6 +200,9 @@ function thread.__call(thread_,...)
 				child.running.value=false
 			end
 			thread_.stop_tick=thread_.parent:tick()
+			if thread_==eztask.running() then
+				return c_yield()
+			end
 		end
 	end)
 	
@@ -214,6 +219,10 @@ function thread.__call(thread_,...)
 end
 
 function thread.kill(thread_)
+	if thread_==eztask.running() then
+		return c_yield("kill")
+	end
+	
 	thread_.running.value=false
 	
 	for _,thread__ in pairs(thread_.threads) do
@@ -226,9 +235,11 @@ function thread.kill(thread_)
 	thread_.parent.threads[thread_.coroutine]=nil
 	eztask.threads[thread_.coroutine]=nil
 	
-	if c_close then c_close(thread_.coroutine) end
-	
 	thread_.active.value=false
+	
+	if c_close then
+		c_close(thread_.coroutine)
+	end
 	
 	return thread_
 end
@@ -245,20 +256,23 @@ function thread.resume(thread_,...)
 	end
 	
 	local resume_tick=thread_:tick()
+	local success,return_
 	
 	if c_status(thread_.coroutine)=="suspended" then
 		if thread_.resume_tick and thread_.resume_tick<=thread_:tick() then
 			thread_.resume_tick=nil
-			local success,ret=c_resume(thread_.coroutine,...)
+			success,return_=c_resume(thread_.coroutine,...)
 			if not success then
-				print(d_traceback(thread_.coroutine,ret))
+				print(d_traceback(thread_.coroutine,return_))
 			end
 		end
 	end
-	if c_status(thread_.coroutine)=="dead" then
-		if not next(thread_.callbacks) and not next(thread_.threads) then
-			return thread_:kill()
-		end
+	if
+		(c_status(thread_.coroutine)=="dead"
+		and not next(thread_.callbacks) and not next(thread_.threads))
+		or return_=="kill"
+	then
+		return thread_:kill()
 	end
 	
 	for _,thread__ in pairs(thread_.threads) do
