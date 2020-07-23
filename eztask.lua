@@ -34,8 +34,10 @@ local c_running   = coroutine.running
 
 local d_traceback = debug.traceback
 
+-------------------------------------------------------------------------------
+
 local eztask={
-	version = {2,5,1},
+	version = {2,5,2},
 	threads = {},
 	tick    = os.clock
 }
@@ -44,6 +46,8 @@ local callback = {}
 local signal   = {}
 local property = {}
 local thread   = {}
+
+-------------------------------------------------------------------------------
 
 function eztask.running()
 	return eztask.threads[c_running()]
@@ -57,7 +61,8 @@ function eztask.step()
 	end
 end
 
---Callback
+-------------------------------------------------------------------------------
+
 function callback.new(event,call,instance)
 	local callback_={
 		event    = event,
@@ -87,14 +92,15 @@ function callback.detach(callback_)
 end
 
 function callback.__call(callback_,...)
-	return
+	return --Ternary ftw
 		(not callback_.thread or callback_.thread.running.value)
 		and callback_.call(callback_.instance or callback_,...)
 end
 
 callback.__index=callback
 
---Signal
+-------------------------------------------------------------------------------
+
 function signal.new()
 	return setmetatable({callbacks={}},signal)
 end
@@ -112,7 +118,8 @@ function signal.detach(signal_)
 end
 
 function signal.__call(signal_,...)
-	for _,callback_ in ipairs(signal_.callbacks) do
+	for i=1,#signal_.callbacks do --ipairs can cause infinite iteration
+		local callback_=signal_.callbacks[i]
 		if callback_ then callback_(...) end
 	end
 	for i=#signal_.callbacks,1,-1 do
@@ -122,9 +129,19 @@ function signal.__call(signal_,...)
 	end
 end
 
+function signal.sleep(signal_,thread_)
+	signal_:attach(function(callback_,...)
+		callback_:detach()
+		thread_.resume_tick=thread_:tick()
+		thread_:resume(...)
+	end)
+	return c_yield()
+end
+
 signal.__index=signal
 
---Property
+-------------------------------------------------------------------------------
+
 function property.new(value)
 	return setmetatable({callbacks={},_value=value},property)
 end
@@ -152,7 +169,8 @@ property.__call=signal.__call
 
 property.attach=callback.new
 
---Thread
+-------------------------------------------------------------------------------
+
 function thread.new(env)
 	return setmetatable({
 		env          = env,
@@ -176,11 +194,11 @@ function thread.__call(thread_,...)
 	
 	thread_.parent        = eztask.running() or eztask
 	thread_.coroutine     = c_create(thread_.env)
-	thread_.active.value  = true
-	thread_.running.value = true
 	thread_.start_tick    = thread_.parent:tick()
 	thread_.stop_tick     = thread_.start_tick
 	thread_.resume_tick   = 0
+	thread_.active.value  = true
+	thread_.running.value = true
 	
 	thread_.parent.threads[thread_.coroutine]=thread_
 	eztask.threads[thread_.coroutine]=thread_
@@ -201,7 +219,7 @@ function thread.__call(thread_,...)
 			end
 			thread_.stop_tick=thread_.parent:tick()
 			if thread_==eztask.running() then
-				return c_yield()
+				c_yield()
 			end
 		end
 	end)
@@ -246,8 +264,9 @@ end
 
 function thread.tick(thread_)
 	return
-		thread_.running.value and thread_.parent:tick()-thread_.start_tick
-		or thread_.stop_tick-thread_.start_tick --If thread is paused
+		(thread_.running.value
+		and thread_.parent:tick()-thread_.start_tick)
+		or thread_.stop_tick-thread_.start_tick
 end
 
 function thread.resume(thread_,...)
@@ -258,18 +277,21 @@ function thread.resume(thread_,...)
 	local resume_tick=thread_:tick()
 	local success,return_
 	
-	if c_status(thread_.coroutine)=="suspended" then
-		if thread_.resume_tick and thread_.resume_tick<=thread_:tick() then
-			thread_.resume_tick=nil
-			success,return_=c_resume(thread_.coroutine,...)
-			if not success then
-				print(d_traceback(thread_.coroutine,return_))
-			end
+	if
+		c_status(thread_.coroutine)=="suspended"
+		and thread_.resume_tick
+		and thread_.resume_tick<=thread_:tick()
+	then
+		thread_.resume_tick=nil
+		success,return_=c_resume(thread_.coroutine,...)
+		if not success then
+			print(d_traceback(thread_.coroutine,return_))
 		end
 	end
 	if
 		(c_status(thread_.coroutine)=="dead"
-		and not next(thread_.callbacks) and not next(thread_.threads))
+		and not next(thread_.callbacks)
+		and not next(thread_.threads))
 		or return_=="kill"
 	then
 		return thread_:kill()
@@ -282,25 +304,19 @@ function thread.resume(thread_,...)
 	thread_.usage=thread_:tick()-resume_tick
 end
 
-function thread.sleep(_,t)
+function thread.sleep(_,t,...)
 	local thread_=eztask.running()
-	
 	if t==nil or type(t)=="number" then
 		thread_.resume_tick=thread_:tick()+(t or 0)
-	elseif getmetatable(t)==signal or getmetatable(t)==property then
-		t:attach(function(callback_,...)
-			callback_:detach()
-			thread_.resume_tick=thread_:tick()
-			thread_:resume(...)
-		end)
+		return c_yield()
 	else
-		error("Invalid yield type: "..type(t))
+		return t:sleep(thread_,...)
 	end
-	
-	return c_yield()
 end
 
 thread.__index=thread
+
+-------------------------------------------------------------------------------
 
 eztask.callback = callback
 eztask.signal   = signal
