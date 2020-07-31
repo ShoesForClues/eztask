@@ -17,6 +17,13 @@ end
 # Creating threads
 ```lua
 local ThreadA=eztask.thread.new(function()
+  eztask.thread.new(function() --Creating a nested thread
+    while true do
+      print("Peaches")
+      eztask.sleep(1)
+    end
+  end)()
+  
   while true do
     print("Apples")
     eztask.sleep(1)
@@ -35,7 +42,7 @@ ThreadB()
 ```
 To kill a thread, call the kill() method. Ex: ```ThreadA:kill()```
 
-You can also kill the thread within itself. Doing so will yield preventing any further code from being executed.
+You can also kill the thread within itself. Doing so will yield preventing any further code from being executed. It will also kill any nested threads.
 
 # Spawning light threads
 You can spawn "light threads" either within a thread or not.
@@ -78,8 +85,10 @@ To detach a callback, call the detach() method on the binding. Ex: ```OnEvent:de
 
 To detach all callbacks, call the detach() method on the signal. Ex: ```TestSignal:detach()```
 
+You can also use yield on signals by doing ```eztask.sleep(TestSignal)``` which will yield the current thread until the signal is invoked. It will also return any values passed to the signal.
+
 # Creating properties
-A property is similar to a signal and invokes when the value has changed.
+A property is similar to a signal except it invokes when the value has changed.
 ```lua
 local TestProperty=eztask.property.new("Apple")
 
