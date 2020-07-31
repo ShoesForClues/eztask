@@ -57,6 +57,7 @@ end)()
 coroutine.wrap(function()
   while true do
     print("Bananas")
+    eztask.sleep(1)
   end
 end)()
 ```
