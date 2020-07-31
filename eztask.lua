@@ -37,9 +37,10 @@ local d_traceback = debug.traceback
 -------------------------------------------------------------------------------
 
 local eztask={
-	version = {2,5,2},
+	version = {2,5,5},
+	tick    = os.clock,
 	threads = {},
-	tick    = os.clock
+	tasks   = {}
 }
 
 local callback = {}
@@ -49,32 +50,108 @@ local thread   = {}
 
 -------------------------------------------------------------------------------
 
-function eztask.running()
-	return eztask.threads[c_running()]
-end
-
 function eztask.step()
 	for _,thread_ in pairs(eztask.threads) do
 		if thread_.parent==eztask then
-			thread_:resume()
+			eztask.resume(thread_)
 		end
+	end
+	for task_,t in pairs(eztask.tasks) do
+		if eztask:tick()>=t then
+			eztask.tasks[task_]=nil
+			eztask.resume(task_)
+		end
+	end
+end
+
+function eztask.sleep(t)
+	local thread_=eztask.running or eztask
+	local coroutine_=c_running()
+	
+	if t==nil or type(t)=="number" then
+		if thread_.coroutine==coroutine_ then
+			thread_.resume_tick=thread_:tick()+(t or 0)
+		else
+			thread_.tasks[coroutine_]=thread_:tick()+(t or 0)
+		end
+	else
+		local callback_
+		if thread_.coroutine==coroutine_ then
+			callback_=t:attach(function(...)
+				callback_:detach()
+				thread_.resume_tick=thread_:tick()
+				eztask.resume(thread_,...)
+			end)
+		else
+			callback_=t:attach(function(...)
+				callback_:detach()
+				eztask.resume(coroutine_,...)
+			end)
+		end
+	end
+	
+	return c_yield()
+end
+
+function eztask.resume(thread_,...)
+	if type(thread_)=="thread" then
+		local success,return_=c_resume(thread_,...)
+		if not success then
+			print(d_traceback(thread_,return_))
+		end
+		return success,return_
+	else
+		local top_thread=eztask.running
+		resume_tick=thread_.parent:tick()
+		eztask.running=thread_
+		
+		if
+			c_status(thread_.coroutine)=="suspended"
+			and thread_.resume_tick
+			and thread_.resume_tick<=thread_:tick()
+		then
+			thread_.resume_tick=nil
+			local _,return_=eztask.resume(thread_.coroutine,...)
+			if return_=="kill" then
+				eztask.running=top_thread
+				return thread_:kill()
+			end
+		end
+		
+		for task_,t in pairs(thread_.tasks) do
+			if thread_:tick()>=t then
+				thread_.tasks[task_]=nil
+				local _,return_=eztask.resume(task_)
+				if return_=="kill" then
+					eztask.running=top_thread
+					return thread_:kill()
+				end
+			end
+		end
+		
+		for _,thread__ in pairs(thread_.threads) do
+			eztask.resume(thread__)
+		end
+		
+		eztask.running=top_thread
 	end
 end
 
 -------------------------------------------------------------------------------
 
-function callback.new(event,call,instance)
+function callback.new(event,call,instance,no_thread)
 	local callback_={
 		event    = event,
 		call     = call,
-		instance = instance,
-		thread   = eztask.running()
+		instance = instance
 	}
 	
 	event.callbacks[#event.callbacks+1]=callback_
 	
-	if callback_.thread then
-		callback_.thread.callbacks[callback_]=callback_
+	if eztask.running and not no_thread then
+		local thread_=eztask.running
+		callback_.thread=thread_
+		thread_.callbacks[callback_]=callback_
 	end
 	
 	return setmetatable(callback_,callback)
@@ -92,9 +169,13 @@ function callback.detach(callback_)
 end
 
 function callback.__call(callback_,...)
-	return --Ternary ftw
-		(not callback_.thread or callback_.thread.running.value)
-		and callback_.call(callback_.instance or callback_,...)
+	if not callback_.thread or callback_.thread.running.value then
+		if callback_.instance then
+			callback_.call(callback_.instance,...)
+		else
+			callback_.call(...)
+		end
+	end
 end
 
 callback.__index=callback
@@ -118,7 +199,7 @@ function signal.detach(signal_)
 end
 
 function signal.__call(signal_,...)
-	for i=1,#signal_.callbacks do --ipairs can cause infinite iteration
+	for i=1,#signal_.callbacks do
 		local callback_=signal_.callbacks[i]
 		if callback_ then callback_(...) end
 	end
@@ -129,15 +210,6 @@ function signal.__call(signal_,...)
 	end
 end
 
-function signal.sleep(signal_,thread_)
-	signal_:attach(function(callback_,...)
-		callback_:detach()
-		thread_.resume_tick=thread_:tick()
-		thread_:resume(...)
-	end)
-	return c_yield()
-end
-
 signal.__index=signal
 
 -------------------------------------------------------------------------------
@@ -146,11 +218,24 @@ function property.new(value)
 	return setmetatable({callbacks={},_value=value},property)
 end
 
+property.attach=callback.new
+
+function property.detach(property_)
+	for i=#property_.callbacks,1,-1 do
+		local callback_=property_.callbacks[i]
+		if callback_ and callback_.thread then
+			callback_.thread.callbacks[callback_]=nil
+		end
+		property_.callbacks[i]=nil
+	end
+end
+
 function property.__index(property_,k)
 	if k=="value" then
 		return rawget(property_,"_value")
+	else
+		return property[k]
 	end
-	return signal[k]
 end
 
 function property.__newindex(property_,k,v)
@@ -158,16 +243,22 @@ function property.__newindex(property_,k,v)
 		local old=rawget(property_,"_value")
 		if v~=old then
 			rawset(property_,"_value",v)
-			property_(v,old)
+			for i=1,#property_.callbacks do
+				local callback_=property_.callbacks[i]
+				if callback_ then
+					callback_(property_._value,old)
+				end
+			end
+			for i=#property_.callbacks,1,-1 do
+				if not property_.callbacks[i] then
+					t_remove(property_.callbacks,i)
+				end
+			end
 		end
 	else
 		rawset(property_,k,v)
 	end
 end
-
-property.__call=signal.__call
-
-property.attach=callback.new
 
 -------------------------------------------------------------------------------
 
@@ -176,23 +267,26 @@ function thread.new(env)
 		env          = env,
 		parent       = nil,
 		running      = property.new(false),
-		active       = property.new(false), --Read only
+		active       = property.new(false),
 		resume_state = false,
 		start_tick   = 0,
 		stop_tick    = 0,
 		resume_tick  = 0,
 		usage        = 0,
 		threads      = {},
+		tasks        = {},
 		callbacks    = {}
 	},thread)
 end
 
 function thread.__call(thread_,...)
-	if thread_.coroutine and c_status(thread_.coroutine)~="dead" then
+	if thread_.active.value then
 		thread_:kill()
 	end
 	
-	thread_.parent        = eztask.running() or eztask
+	local call_running,call_active
+	
+	thread_.parent        = eztask.running or eztask
 	thread_.coroutine     = c_create(thread_.env)
 	thread_.start_tick    = thread_.parent:tick()
 	thread_.stop_tick     = thread_.start_tick
@@ -203,7 +297,7 @@ function thread.__call(thread_,...)
 	thread_.parent.threads[thread_.coroutine]=thread_
 	eztask.threads[thread_.coroutine]=thread_
 	
-	local running_=thread_.running:attach(function(_,state)
+	call_running=thread_.running:attach(function(state)
 		if state then
 			thread_.start_tick=(
 				thread_.start_tick
@@ -213,32 +307,43 @@ function thread.__call(thread_,...)
 				child.running.value=child.resume_state
 			end
 		else
+			thread_.stop_tick=thread_.parent:tick()
 			for _,child in pairs(thread_.threads) do
 				child.resume_state=child.running.value
 				child.running.value=false
 			end
-			thread_.stop_tick=thread_.parent:tick()
-			if thread_==eztask.running() then
+			if thread_.coroutine==c_running() then
 				c_yield()
 			end
 		end
-	end)
+	end,nil,true)
 	
-	thread_.active:attach(function(callback_,active)
+	call_active=thread_.active:attach(function(active)
 		if not active then
-			running_:detach()
-			callback_:detach()
+			call_running:detach()
+			call_active:detach()
 		end
-	end)
+	end,nil,true)
 	
-	thread_:resume(thread_,...)
+	eztask.resume(thread_,...)
 	
 	return thread_
 end
 
 function thread.kill(thread_)
-	if thread_==eztask.running() then
+	if not thread_.coroutine then
+		return
+	end
+	if thread_==eztask.running then
 		return c_yield("kill")
+	end
+	
+	if c_close then
+		c_close(thread_.coroutine)
+		for task_,t in pairs(thread_.tasks) do
+			thread_.tasks[task_]=nil
+			c_close(task_)
+		end
 	end
 	
 	thread_.running.value=false
@@ -255,62 +360,14 @@ function thread.kill(thread_)
 	
 	thread_.active.value=false
 	
-	if c_close then
-		c_close(thread_.coroutine)
-	end
-	
 	return thread_
 end
 
 function thread.tick(thread_)
-	return
-		(thread_.running.value
-		and thread_.parent:tick()-thread_.start_tick)
-		or thread_.stop_tick-thread_.start_tick
-end
-
-function thread.resume(thread_,...)
-	if not thread_.running.value then
-		return
-	end
-	
-	local resume_tick=thread_:tick()
-	local success,return_
-	
-	if
-		c_status(thread_.coroutine)=="suspended"
-		and thread_.resume_tick
-		and thread_.resume_tick<=thread_:tick()
-	then
-		thread_.resume_tick=nil
-		success,return_=c_resume(thread_.coroutine,...)
-		if not success then
-			print(d_traceback(thread_.coroutine,return_))
-		end
-	end
-	if
-		(c_status(thread_.coroutine)=="dead"
-		and not next(thread_.callbacks)
-		and not next(thread_.threads))
-		or return_=="kill"
-	then
-		return thread_:kill()
-	end
-	
-	for _,thread__ in pairs(thread_.threads) do
-		thread__:resume()
-	end
-	
-	thread_.usage=thread_:tick()-resume_tick
-end
-
-function thread.sleep(_,t,...)
-	local thread_=eztask.running()
-	if t==nil or type(t)=="number" then
-		thread_.resume_tick=thread_:tick()+(t or 0)
-		return c_yield()
+	if thread_.running.value then
+		return thread_.parent:tick()-thread_.start_tick
 	else
-		return t:sleep(thread_,...)
+		return thread_.stop_tick-thread_.start_tick
 	end
 end
 
