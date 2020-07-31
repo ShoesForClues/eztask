@@ -16,17 +16,23 @@ end
 
 # Creating threads
 ```lua
-local ThreadA=eztask.thread.new(function(thread)
+local ThreadA=eztask.thread.new(function()
+  coroutine.wrap(function()
+    while true do
+      print("Grapes")
+      eztask.sleep(1)
+    end
+  end)()
   while true do
     print("Apples")
-    thread:sleep(1)
+    eztask.sleep(1)
   end
 end)
 
-local ThreadB=eztask.thread.new(function(thread)
+local ThreadB=eztask.thread.new(function()
   while true do
     print("Oranges")
-    thread:sleep(1)
+    eztask.sleep(1)
   end
 end)
 
@@ -35,13 +41,13 @@ ThreadB()
 ```
 To kill a thread, call the kill() method. Ex: ```ThreadA:kill()```
 
-You can also kill it within the thread itself. Ex: ```thread:kill()```
+You can also kill the thread within itself. Doing so will yield preventing any further code from being executed.
 
 # Creating signals
 ```lua
 local TestSignal=eztask.signal.new()
 
-local OnEvent=TestSignal:attach(function(callback,...)
+local OnEvent=TestSignal:attach(function(...)
   print("Signal invoked!",...)
 end)
 
@@ -52,14 +58,12 @@ To detach a callback, call the detach() method on the binding. Ex: ```OnEvent:de
 
 To detach all callbacks, call the detach() method on the signal. Ex: ```TestSignal:detach()```
 
-You can also detach the callback within. Ex: ```callback:detach()```
-
 # Creating properties
-A property is derived from signal and invokes when the value has changed.
+A property is similar to a signal and invokes when the value has changed.
 ```lua
 local TestProperty=eztask.property.new("Apple")
 
-local OnChanged=TestProperty:attach(function(callback,new,old)
+local OnChanged=TestProperty:attach(function(new,old)
   print("Property changed!",new,old)
 end)
 
