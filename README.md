@@ -45,7 +45,7 @@ To kill a thread, call the kill() method. Ex: ```ThreadA:kill()```
 You can also kill the thread within itself. Doing so will yield preventing any further code from being executed. It will also kill any nested threads.
 
 # Spawning light threads
-You can spawn "light threads" either within or outside of a thread.
+You can spawn "light threads" (aka: coroutine.wrap) either within or outside of a thread.
 ```lua
 eztask.thread.new(function()
   coroutine.wrap(function()
