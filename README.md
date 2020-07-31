@@ -85,7 +85,7 @@ To detach a callback, call the detach() method on the binding. Ex: ```OnEvent:de
 
 To detach all callbacks, call the detach() method on the signal. Ex: ```TestSignal:detach()```
 
-You can also use yield on signals by doing ```eztask.sleep(TestSignal)``` which will yield the current thread until the signal is invoked. It will also return any values passed to the signal.
+You can also yield on signals by doing ```eztask.sleep(TestSignal)``` which will yield the current thread until the signal is invoked. It will also return any values passed to the signal.
 
 # Creating properties
 A property is similar to a signal except it invokes when the value has changed.
