@@ -17,13 +17,6 @@ end
 # Creating threads
 ```lua
 local ThreadA=eztask.thread.new(function()
-  eztask.thread.new(function() --Creating a nested thread
-    while true do
-      print("Peaches")
-      eztask.sleep(1)
-    end
-  end)()
-  
   while true do
     print("Apples")
     eztask.sleep(1)
@@ -42,7 +35,7 @@ ThreadB()
 ```
 To kill a thread, call the kill() method. Ex: ```ThreadA:kill()```
 
-You can also kill the thread within itself. Doing so will yield preventing any further code from being executed. It will also kill any nested threads.
+You can also kill the thread within itself. Doing so will yield preventing any further code from being executed.
 
 # Spawning light threads
 You can spawn "light threads" (aka: coroutine.wrap) either within or outside of a thread.
@@ -68,7 +61,7 @@ coroutine.wrap(function()
   end
 end)()
 ```
-Just like nested threads, creating a light thread inside a thread will mean its runtime is dependent of that parent thread. If the parent thread is killed, the light thread will also stop running.
+It is important to note that creating a light thread inside a thread will mean its runtime is dependent of that parent thread. If the parent thread is killed, the light thread will also stop running.
 
 # Creating signals
 ```lua
