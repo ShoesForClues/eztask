@@ -172,7 +172,11 @@ function callback.__call(callback_,...)
 				callback_.instance,...
 			)
 		else
-			eztask.resume(c_create(callback_.call),...)
+			if type(callback_.call)=="function" then
+				eztask.resume(c_create(callback_.call),...)
+			else
+				callback_.call(...)
+			end
 		end
 	end
 end
@@ -185,7 +189,9 @@ function signal.new()
 	return setmetatable({callbacks={}},signal)
 end
 
-signal.attach=callback.new
+function signal.attach(signal_,call,instance)
+	return callback.new(signal_,call,instance)
+end
 
 function signal.detach(signal_)
 	for i=#signal_.callbacks,1,-1 do
@@ -217,7 +223,9 @@ function property.new(value)
 	return setmetatable({callbacks={},_value=value},property)
 end
 
-property.attach=callback.new
+function property.attach(property_,call,instance)
+	return callback.new(property_,call,instance)
+end
 
 function property.detach(property_)
 	for i=#property_.callbacks,1,-1 do
