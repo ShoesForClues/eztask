@@ -33,9 +33,8 @@ end)
 ThreadA()
 ThreadB()
 ```
-To kill a thread, call the kill() method. Ex: ```ThreadA:kill()```
-
-You can also kill the thread within itself. Doing so will yield preventing any further code from being executed.
+- To kill a thread, call the kill() method. Ex: ```ThreadA:kill()```
+- You can also kill the thread within itself. Doing so will yield preventing any further code from being executed.
 
 # Spawning light threads
 You can spawn "light threads" (aka: coroutine.wrap) either within or outside of a thread.
@@ -61,7 +60,7 @@ coroutine.wrap(function()
   end
 end)()
 ```
-It is important to note that creating a light thread inside a thread will mean its runtime is dependent of that parent thread. If the parent thread is killed, the light thread will also stop running.
+- It is important to note that creating a light thread inside a thread will mean its runtime is dependent of that parent thread. If the parent thread is killed, the light thread will also stop running.
 
 # Creating signals
 ```lua
@@ -74,11 +73,10 @@ end)
 TestSignal("Hello World!")
 TestSignal("Goodbye World!")
 ```
-To detach a callback, call the detach() method on the binding. Ex: ```OnEvent:detach()```
-
-To detach all callbacks, call the detach() method on the signal. Ex: ```TestSignal:detach()```
-
-You can also yield on signals by doing ```eztask.sleep(TestSignal)``` which will yield the current thread until the signal is invoked. It will also return any values passed to the signal.
+- To detach a callback, call the detach() method on the binding. Ex: ```OnEvent:detach()```
+- To detach all callbacks, call the detach() method on the signal. Ex: ```TestSignal:detach()```
+- You can also yield on signals by doing ```eztask.sleep(TestSignal)``` which will yield the current thread until the signal is invoked. It will also return any values passed to the signal.
+- It is also important to note that any callbacks created within a thread will automatically be detached when the thread is killed.
 
 # Creating properties
 A property is similar to a signal except it invokes when the value has changed.
@@ -91,4 +89,4 @@ end)
 
 TestProperty.value="Orange"
 ```
-Detaching a property is the same as a signal.
+- Detaching a property is the same as a signal.
