@@ -67,7 +67,7 @@ It is important to note that creating a light thread inside a thread will mean i
 ```lua
 local TestSignal=eztask.signal.new()
 
-local OnEvent=TestSignal:attach(function(...)
+local OnEvent=TestSignal:attach(function(...) --A light thread is spawned every time it's called
   print("Signal invoked:",...)
 end)
 
@@ -86,7 +86,7 @@ A property is similar to a signal except it invokes when the value has changed.
 local TestProperty=eztask.property.new("Apple")
 
 local OnChanged=TestProperty:attach(function(new,old)
-  print("Property changed!",new,old)
+  print(string.format("Property changed from %s to %s",old,new))
 end)
 
 TestProperty.value="Orange"
