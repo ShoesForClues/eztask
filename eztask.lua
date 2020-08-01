@@ -26,6 +26,7 @@ local t_remove    = table.remove
 local t_clear     = table.clear       --LuaJIT 2.0.5
 
 local c_create    = coroutine.create
+local c_wrap      = coroutine.wrap
 local c_close     = coroutine.close   --Lua 5.4
 local c_resume    = coroutine.resume
 local c_yield     = coroutine.yield
@@ -52,9 +53,7 @@ local thread   = {}
 
 function eztask.step()
 	for _,thread_ in pairs(eztask.threads) do
-		if thread_.parent==eztask then
-			eztask.resume(thread_)
-		end
+		eztask.resume(thread_)
 	end
 	for task_,t in pairs(eztask.tasks) do
 		if eztask:tick()>=t then
@@ -100,58 +99,55 @@ function eztask.resume(thread_,...)
 			print(d_traceback(thread_,return_))
 		end
 		return success,return_
-	else
-		local top_thread=eztask.running
-		resume_tick=thread_.parent:tick()
-		eztask.running=thread_
-		
-		if
-			c_status(thread_.coroutine)=="suspended"
-			and thread_.resume_tick
-			and thread_.resume_tick<=thread_:tick()
-		then
-			thread_.resume_tick=nil
-			local _,return_=eztask.resume(thread_.coroutine,...)
+	end
+	
+	local top_thread=eztask.running
+	resume_tick=eztask.tick()
+	eztask.running=thread_
+	
+	if
+		c_status(thread_.coroutine)=="suspended"
+		and thread_.resume_tick
+		and thread_.resume_tick<=thread_:tick()
+	then
+		thread_.resume_tick=nil
+		local _,return_=eztask.resume(thread_.coroutine,...)
+		if return_=="kill" then
+			eztask.running=top_thread
+			return thread_:kill()
+		end
+	end
+	
+	for task_,t in pairs(thread_.tasks) do
+		if thread_:tick()>=t then
+			thread_.tasks[task_]=nil
+			local _,return_=eztask.resume(task_)
 			if return_=="kill" then
 				eztask.running=top_thread
 				return thread_:kill()
 			end
+		elseif c_status(task_)=="dead" then
+			thread_.tasks[task_]=nil
 		end
-		
-		for task_,t in pairs(thread_.tasks) do
-			if thread_:tick()>=t then
-				thread_.tasks[task_]=nil
-				local _,return_=eztask.resume(task_)
-				if return_=="kill" then
-					eztask.running=top_thread
-					return thread_:kill()
-				end
-			end
-		end
-		
-		for _,thread__ in pairs(thread_.threads) do
-			eztask.resume(thread__)
-		end
-		
-		eztask.running=top_thread
 	end
+	
+	eztask.running=top_thread
 end
 
 -------------------------------------------------------------------------------
 
-function callback.new(event,call,instance,no_thread)
+function callback.new(event,call,instance)
 	local callback_={
 		event    = event,
 		call     = call,
-		instance = instance
+		instance = instance,
+		thread   = eztask.running
 	}
 	
 	event.callbacks[#event.callbacks+1]=callback_
 	
-	if eztask.running and not no_thread then
-		local thread_=eztask.running
-		callback_.thread=thread_
-		thread_.callbacks[callback_]=callback_
+	if callback_.thread then
+		callback_.thread.callbacks[callback_]=callback_
 	end
 	
 	return setmetatable(callback_,callback)
@@ -171,9 +167,12 @@ end
 function callback.__call(callback_,...)
 	if not callback_.thread or callback_.thread.running.value then
 		if callback_.instance then
-			callback_.call(callback_.instance,...)
+			eztask.resume(
+				c_create(callback_.call),
+				callback_.instance,...
+			)
 		else
-			callback_.call(...)
+			eztask.resume(c_create(callback_.call),...)
 		end
 	end
 end
@@ -265,7 +264,6 @@ end
 function thread.new(env)
 	return setmetatable({
 		env          = env,
-		parent       = nil,
 		running      = property.new(false),
 		active       = property.new(false),
 		resume_state = false,
@@ -273,7 +271,6 @@ function thread.new(env)
 		stop_tick    = 0,
 		resume_tick  = 0,
 		usage        = 0,
-		threads      = {},
 		tasks        = {},
 		callbacks    = {}
 	},thread)
@@ -286,44 +283,36 @@ function thread.__call(thread_,...)
 	
 	local call_running,call_active
 	
-	thread_.parent        = eztask.running or eztask
 	thread_.coroutine     = c_create(thread_.env)
-	thread_.start_tick    = thread_.parent:tick()
+	thread_.start_tick    = eztask.tick()
 	thread_.stop_tick     = thread_.start_tick
 	thread_.resume_tick   = 0
 	thread_.active.value  = true
 	thread_.running.value = true
 	
-	thread_.parent.threads[thread_.coroutine]=thread_
 	eztask.threads[thread_.coroutine]=thread_
 	
 	call_running=thread_.running:attach(function(state)
 		if state then
 			thread_.start_tick=(
-				thread_.start_tick
-				+(thread_.parent:tick()-thread_.stop_tick)
+				thread_.start_tick+(
+					eztask.tick()-thread_.stop_tick
+				)
 			)
-			for _,child in pairs(thread_.threads) do
-				child.running.value=child.resume_state
-			end
 		else
-			thread_.stop_tick=thread_.parent:tick()
-			for _,child in pairs(thread_.threads) do
-				child.resume_state=child.running.value
-				child.running.value=false
-			end
+			thread_.stop_tick=eztask.tick()
 			if thread_.coroutine==c_running() then
 				c_yield()
 			end
 		end
-	end,nil,true)
+	end)
 	
 	call_active=thread_.active:attach(function(active)
 		if not active then
 			call_running:detach()
 			call_active:detach()
 		end
-	end,nil,true)
+	end)
 	
 	eztask.resume(thread_,...)
 	
@@ -338,34 +327,32 @@ function thread.kill(thread_)
 		return c_yield("kill")
 	end
 	
-	if c_close then
-		c_close(thread_.coroutine)
-		for task_,t in pairs(thread_.tasks) do
-			thread_.tasks[task_]=nil
-			c_close(task_)
-		end
-	end
+	thread_.running.value = false
+	thread_.active.value  = false
 	
-	thread_.running.value=false
-	
-	for _,thread__ in pairs(thread_.threads) do
-		thread__:kill()
-	end
 	for _,callback_ in pairs(thread_.callbacks) do
 		callback_:detach()
 	end
 	
-	thread_.parent.threads[thread_.coroutine]=nil
-	eztask.threads[thread_.coroutine]=nil
+	if c_close then
+		c_close(thread_.coroutine)
+	end
 	
-	thread_.active.value=false
+	for task_,t in pairs(thread_.tasks) do
+		thread_.tasks[task_]=nil
+		if c_close then
+			c_close(task_)
+		end
+	end
+	
+	eztask.threads[thread_.coroutine]=nil
 	
 	return thread_
 end
 
 function thread.tick(thread_)
 	if thread_.running.value then
-		return thread_.parent:tick()-thread_.start_tick
+		return eztask.tick()-thread_.start_tick
 	else
 		return thread_.stop_tick-thread_.start_tick
 	end
